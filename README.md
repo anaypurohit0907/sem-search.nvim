@@ -3,7 +3,7 @@
  the most intuitive, beautiful semantic search Neovim has ever seen. 
 
 ## Features
-- **Tree-sitter native**: Fast chunking & extraction.
+- **Universal chunking**: Index the whole codebase, not just specific code constructs.
 - **Ollama + nomic-embed-text**: 100% local embedding models.
 - **FAISS**: <200ms lightning-fast semantic queries in python.
 
@@ -12,7 +12,6 @@
 ```lua
 return {
   "anay/sem-search.nvim",
-  dependencies = { "nvim-treesitter/nvim-treesitter" },
   opts = {
     keymap = { 
       search = '<leader>ss', 

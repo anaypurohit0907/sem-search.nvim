@@ -1,5 +1,5 @@
 local M = {}
-local treesitter = require('sem-search.treesitter')
+local chunker = require('sem-search.chunker')
 local faiss = require('sem-search.faiss')
 local config = require('sem-search.config')
 
@@ -80,7 +80,7 @@ function M.reindex(callback, ctx)
   
   local all_chunks = {}
   for _, f in ipairs(files) do
-    local chunks = treesitter.get_chunks_from_file(f)
+    local chunks = chunker.get_chunks_from_file(f)
     for _, c in ipairs(chunks) do
       table.insert(all_chunks, c)
     end
