@@ -1,6 +1,6 @@
 # sem-search.nvim
 
-Build the most intuitive, beautiful semantic search Neovim has ever seen. 
+ the most intuitive, beautiful semantic search Neovim has ever seen. 
 
 ## Features
 - **Tree-sitter native**: Fast chunking & extraction.

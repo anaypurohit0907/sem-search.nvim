@@ -8,7 +8,7 @@ function M.setup(opts)
   config.setup(opts)
 
   -- Setup Commands
-  vim.api.nvim_create_user_command('Semetup', function()
+  vim.api.nvim_create_user_command('Semsetup', function()
     index.reindex()
   end, {})
 

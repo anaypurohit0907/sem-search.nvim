@@ -78,11 +78,13 @@ function M.start_server(cb, ctx)
               -- Convert vim.NIL to standard lua `nil` so 'if err' logic flows perfectly inside callbacks.
               
               local res = decoded.result
-              if type(res) == "userdata" then res = nil end
+              if res == vim.NIL or type(res) == "userdata" then res = nil end
               local err = decoded.error
-              if type(err) == "userdata" then err = nil end
-              callbacks[decoded.id](res, err)
+              if err == vim.NIL or type(err) == "userdata" then err = nil end
+              
+              local cb = callbacks[decoded.id]
               callbacks[decoded.id] = nil
+              if cb then cb(res, err) end
             end
           end
         end
