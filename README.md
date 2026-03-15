@@ -14,7 +14,12 @@ return {
   "anay/sem-search.nvim",
   dependencies = { "nvim-treesitter/nvim-treesitter" },
   opts = {
-    keymap = { search = '<leader>ss', setup = '<leader>uS' },
+    keymap = { 
+      search = '<leader>ss', 
+      workspace_search = '<leader>sw', 
+      setup = '<leader>uS', 
+      reindex = '<leader>si' 
+    },
     ollama_host = 'localhost:11434',
     embed_model = 'nomic-embed-text',
     max_results = 10,
@@ -25,6 +30,8 @@ return {
 ```
 
 ## Commands
-- `<leader>ss` - Open search input window
-- `:Semetup` - First-time index setup.
-- `<leader>si` - Manually update workspace index.
+- `<leader>ss` - Semantic search within the current file
+- `<leader>sw` - Semantic search across the entire workspace
+- `<leader>si` - Manually update and reindex the workspace
+- `<leader>uS` - SemSearch config (Settings)
+- `:Semsetup` - First-time index setup / Reindex workspace

@@ -61,11 +61,17 @@ function M.get_chunks_from_file(filepath)
       end
       local text = table.concat(snippet_lines, "\n")
       
+      local cwd = vim.fn.getcwd()
+      local rel_file = filepath
+      if string.sub(filepath, 1, #cwd) == cwd then
+        rel_file = string.sub(filepath, #cwd + 2)
+      end
+
       table.insert(chunks, {
         name = name,
         line = start_row + 1,
         text = text,
-        file = filepath:gsub(vim.fn.getcwd() .. "/", "") -- Make relative to cwd
+        file = rel_file
       })
     end
   end

@@ -65,7 +65,10 @@ function M.search(opts)
   else
     current_file = nil
   end
-  local file_filter = opts.workspace and nil or current_file
+  local file_filter = nil
+  if not opts.workspace then
+    file_filter = current_file
+  end
 
   local width = 80
   local height = 15

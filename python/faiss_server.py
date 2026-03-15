@@ -44,7 +44,7 @@ class CodeIndex:
             return []
         try:
             q_emb = ollama.embeddings(model=model, prompt=query)['embedding']
-            search_k = min(self.index.ntotal, 10000) if file_filter else k
+            search_k = min(self.index.ntotal, 10000 if file_filter else k)
             scores, indices = self.index.search(np.array([q_emb]).astype('float32'), search_k)
             
             results = []
