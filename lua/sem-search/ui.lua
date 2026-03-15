@@ -93,6 +93,13 @@ end
 
 function M.search(opts)
   opts = opts or {}
+  
+  if M.app_state == "results" or M.app_state == "ready" then
+    M.app_state = "ready"
+    M.current_results = {}
+    M.active_res_idx = nil
+  end
+  
   local current_file = vim.api.nvim_buf_get_name(0)
   if current_file ~= "" then
     local cwd = vim.fn.getcwd()

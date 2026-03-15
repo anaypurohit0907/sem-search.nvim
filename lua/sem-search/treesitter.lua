@@ -10,10 +10,10 @@ M.ext_to_lang = {
 }
 
 M.queries = {
-  lua = '(function_declaration name: (identifier) @symbol)',
-  typescript = '(function_declaration name: (identifier) @symbol) (method_definition name: (property_identifier) @symbol)',
-  javascript = '(function_declaration name: (identifier) @symbol)',
-  python = '(function_definition name: (identifier) @symbol)',
+  lua = '(function_declaration name: [(identifier) (dot_index_expression)] @symbol)',
+  typescript = '(function_declaration name: (identifier) @symbol) (method_definition name: (property_identifier) @symbol) (variable_declarator name: (identifier) @symbol value: (arrow_function))',
+  javascript = '(function_declaration name: (identifier) @symbol) (method_definition name: (property_identifier) @symbol) (variable_declarator name: (identifier) @symbol value: (arrow_function))',
+  python = '(function_definition name: (identifier) @symbol) (class_definition name: (identifier) @symbol)',
   go = '(function_declaration name: (identifier) @symbol) (method_declaration name: (field_identifier) @symbol)',
   rust = '(function_item name: (identifier) @symbol)',
 }
