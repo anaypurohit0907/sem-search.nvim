@@ -54,7 +54,19 @@ local function get_bouncing_bar(idx, width)
   end
 end
 
-function M.search()
+function M.search(opts)
+  opts = opts or {}
+  local current_file = vim.api.nvim_buf_get_name(0)
+  if current_file ~= "" then
+    local cwd = vim.fn.getcwd()
+    if vim.startswith(current_file, cwd) then
+      current_file = current_file:sub(#cwd + 2)
+    end
+  else
+    current_file = nil
+  end
+  local file_filter = opts.workspace and nil or current_file
+
   local width = 80
   local height = 15
   local row = math.floor((vim.o.lines - height) / 2)
@@ -62,19 +74,21 @@ function M.search()
 
   local results_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[results_buf].bufhidden = "wipe"
+  local results_title = file_filter and ' 🎯 Semantic Search (File) ' or ' 🎯 Semantic Search (Workspace) '
   local results_win = vim.api.nvim_open_win(results_buf, true, {
     relative = 'editor', width = width, height = height, row = row, col = col,
-    style = 'minimal', border = 'rounded', title = ' 🎯 Semantic Search Results ', title_pos = 'center',
+    style = 'minimal', border = 'rounded', title = results_title, title_pos = 'center',
     footer = ' <CR> Jump  yy Copy Path  q/Esc Close ', footer_pos = 'center'
   })
   
   active_win = results_win
   active_buf = results_buf
 
+  local prompt_title = file_filter and ' 🔍 Semantic Search (File) ' or ' 🔍 Semantic Search (Workspace) '
   local prompt_buf = vim.api.nvim_create_buf(false, true)
   local prompt_win = vim.api.nvim_open_win(prompt_buf, true, {
     relative = 'editor', width = width, height = 1, row = row + height + 2, col = col,
-    style = 'minimal', border = 'rounded', title = ' 🔍 Semantic Search ', title_pos = 'left'
+    style = 'minimal', border = 'rounded', title = prompt_title, title_pos = 'left'
   })
 
   vim.bo[prompt_buf].buftype = 'prompt'
@@ -93,32 +107,6 @@ function M.search()
   vim.keymap.set('n', 'q', close_ui, { buffer = results_buf, noremap = true, silent = true })
   vim.keymap.set('n', '<Esc>', close_ui, { buffer = results_buf, noremap = true, silent = true })
   vim.keymap.set('n', '<CR>', function() jump_to_result(nil) end, { buffer = results_buf, noremap = true, silent = true })
-    vim.keymap.set({'n', 'i'}, '<C-j>', function() 
-      if not vim.api.nvim_win_is_valid(results_win) then return end
-      local cur = vim.api.nvim_win_get_cursor(results_win)
-      local max_line = vim.api.nvim_buf_line_count(results_buf)
-      if cur[1] < max_line then vim.api.nvim_win_set_cursor(results_win, {cur[1] + 1, 0}) end
-    end, { buffer = prompt_buf, noremap = true, silent = true })
-    vim.keymap.set({'n', 'i'}, '<C-k>', function() 
-      if not vim.api.nvim_win_is_valid(results_win) then return end
-      local cur = vim.api.nvim_win_get_cursor(results_win)
-      if cur[1] > 1 then vim.api.nvim_win_set_cursor(results_win, {cur[1] - 1, 0}) end
-    end, { buffer = prompt_buf, noremap = true, silent = true })
-    vim.keymap.set('n', 'j', function() 
-      if not vim.api.nvim_win_is_valid(results_win) then return end
-      local cur = vim.api.nvim_win_get_cursor(results_win)
-      local max_line = vim.api.nvim_buf_line_count(results_buf)
-      if cur[1] < max_line then vim.api.nvim_win_set_cursor(results_win, {cur[1] + 1, 0}) end
-    end, { buffer = prompt_buf, noremap = true, silent = true })
-    vim.keymap.set('n', 'k', function() 
-      if not vim.api.nvim_win_is_valid(results_win) then return end
-      local cur = vim.api.nvim_win_get_cursor(results_win)
-      if cur[1] > 1 then vim.api.nvim_win_set_cursor(results_win, {cur[1] - 1, 0}) end
-    end, { buffer = prompt_buf, noremap = true, silent = true })
-    vim.keymap.set({'n', 'i'}, '<CR>', function() 
-      if vim.api.nvim_get_mode().mode:match('i') then vim.cmd('stopinsert') end
-      jump_to_result(nil)
-    end, { buffer = prompt_buf, noremap = true, silent = true })
 
   -- Setup keymaps for prompt if we are currently prompting
   local function setup_prompt_keys()
@@ -224,7 +212,8 @@ function M.search()
       
     elseif M.app_state == "ready" and not local_ready_drawn then
       local_ready_drawn = true
-      pcall(vim.api.nvim_win_set_config, results_win, { title = ' 🎯 Semantic Search Results ' })
+      local title_str = file_filter and ' 🎯 Semantic Search (File) ' or ' 🎯 Semantic Search (Workspace) '
+      pcall(vim.api.nvim_win_set_config, results_win, { title = title_str })
       vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, {"", "  ✅ Ready! Type a query below to semantic search.", "", "  💡 " .. tips[tip_idx]})
       if vim.api.nvim_get_current_win() == prompt_win then
          vim.cmd('startinsert')
@@ -242,7 +231,8 @@ function M.search()
       if #lines == 0 then lines = {"  No results found."} end
       
       vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
-      pcall(vim.api.nvim_win_set_config, results_win, { title = ' 🎯 Semantic Search (' .. #M.current_results .. ' matches) ' })
+      local scope_str = file_filter and "File" or "Workspace"
+      pcall(vim.api.nvim_win_set_config, results_win, { title = ' 🎯 Semantic Search ' .. scope_str .. ' (' .. #M.current_results .. ' matches) ' })
       pcall(vim.api.nvim_win_set_cursor, results_win, {1, 0})
     end
   end))
@@ -270,7 +260,7 @@ function M.search()
     M.search_start_time = vim.loop.hrtime()
     local_ready_drawn = false -- wipe state
 
-    index.search(query, function(results, err)
+    index.search(query, { file_filter = file_filter }, function(results, err)
       vim.schedule(function()
         if err then
           vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, {"  Error: " .. tostring(err)})
