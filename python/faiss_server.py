@@ -31,7 +31,9 @@ class CodeIndex:
                 raise Exception(f"Failed embedding chunk (is model '{model}' pulled?): {str(e)}")
         
         if embeds:
-            self.index.add(np.array(embeds).astype('float32'))
+            data = np.array(embeds).astype('float32')
+            faiss.normalize_L2(data)
+            self.index.add(data)
             
     def clear(self):
         self.chunks = []
@@ -47,21 +49,33 @@ class CodeIndex:
         if self.index.ntotal == 0:
             return []
         try:
-            q_emb = ollama.embeddings(model=model, prompt=query)['embedding']
+            q_emb = np.array([ollama.embeddings(model=model, prompt=query)['embedding']]).astype('float32')
+            faiss.normalize_L2(q_emb)
             search_k = min(self.index.ntotal, 10000 if file_filter else k)
-            scores, indices = self.index.search(np.array([q_emb]).astype('float32'), search_k)
+            scores, indices = self.index.search(q_emb, search_k)
             
             results = []
+            best_score = float(scores[0][0])
             for i, idx in enumerate(indices[0]):
                 if len(results) >= k:
                     break
+                
+                score_val = float(scores[0][i])
+                # In normalized cosine similarity, reject items that are severely less relevant than the best
+                # or if they fall below a baseline floor (e.g. < 0.4 meaning totally unrelated)
+                if score_val < 0.4 and len(results) > 0:
+                    break
+                # Only keep results within a reasonable margin of the absolute best match
+                if i > 0 and score_val < best_score - 0.15:
+                    break
+                    
                 if 0 <= idx < len(self.chunks) and idx >= 0:
                     chunk = self.chunks[idx]
                     if file_filter and chunk.get('file', '') != file_filter:
                         continue
-                    score_val = float(scores[0][i]) * 100
+                        
                     results.append({
-                        "score": round(score_val, 2),
+                        "score": round(score_val * 100, 1),
                         "file": chunk.get('file', ''),
                         "line": chunk.get('line', 1),
                         "func": chunk.get('name', ''),
