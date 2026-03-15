@@ -31,7 +31,7 @@ class CodeIndex:
                 raise Exception(f"Failed embedding chunk (is model '{model}' pulled?): {str(e)}")
         
         if embeds:
-            self.index.add(np.array(embeds).astype('f32'))
+            self.index.add(np.array(embeds).astype('float32'))
             
     def save(self):
         os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
@@ -44,7 +44,7 @@ class CodeIndex:
             return []
         try:
             q_emb = ollama.embeddings(model=model, prompt=query)['embedding']
-            scores, indices = self.index.search(np.array([q_emb]).astype('f32'), k)
+            scores, indices = self.index.search(np.array([q_emb]).astype('float32'), k)
             
             results = []
             for i, idx in enumerate(indices[0]):

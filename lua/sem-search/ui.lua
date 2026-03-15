@@ -12,15 +12,15 @@ M.search_start_time = nil
 
 local spinner_frames = {'⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'}
 local tips = {
-  "Tip: Use `%` to jump between matching brackets.",
-  "Tip: `:help` is your best friend!",
-  "Joke: Why do programmers prefer dark mode? Because light attracts bugs.",
-  "Tip: `ciw` changes the inner word under your cursor.",
-  "Joke: I have a joke about UDP, but you might not get it.",
-  "Tip: Use `<C-o>` and `<C-i>` to navigate backwards and forwards.",
-  "Joke: There are 10 types of people: those who understand binary, and those who don't.",
-  "Joke: How many programmers does it take to change a light bulb? None, that's a hardware problem.",
-  "Tip: `zz` centers your cursor on the screen immediately.",
+  " Use `%` to jump between matching brackets.",
+  "help` is your best friend!",
+  " Why do programmers prefer dark mode? Because light attracts bugs.",
+  " `ciw` changes the inner word under your cursor.",
+  " I have a joke about UDP, but you might not get it.",
+  " Use `<C-o>` and `<C-i>` to navigate backwards and forwards.",
+  " There are 10 types of people: those who understand binary, and those who don't.",
+  " How many programmers does it take to change a light bulb? None, that's a hardware problem.",
+  " `zz` centers your cursor on the screen immediately.",
 }
 
 local active_win = nil
