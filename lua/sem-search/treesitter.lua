@@ -1,41 +1,75 @@
 local M = {}
 
+M.ext_to_lang = {
+  lua = "lua",
+  ts = "typescript",
+  py = "python",
+  go = "go",
+  rs = "rust",
+  js = "javascript"
+}
+
 M.queries = {
   lua = '(function_declaration name: (identifier) @symbol)',
-  typescript = '(method_definition name: (property_identifier) @symbol)',
+  typescript = '(function_declaration name: (identifier) @symbol) (method_definition name: (property_identifier) @symbol)',
+  javascript = '(function_declaration name: (identifier) @symbol)',
   python = '(function_definition name: (identifier) @symbol)',
-  go = '(method_declaration name: (field_identifier) @symbol)',
+  go = '(function_declaration name: (identifier) @symbol) (method_declaration name: (field_identifier) @symbol)',
   rust = '(function_item name: (identifier) @symbol)',
 }
 
--- Extract chunks for embedding
-function M.get_chunks(bufnr, lang)
+function M.get_chunks_from_file(filepath)
+  local ext = vim.fn.fnamemodify(filepath, ":e")
+  local lang = M.ext_to_lang[ext]
+  if not lang then return {} end
+  
   local query_string = M.queries[lang]
   if not query_string then return {} end
-  
-  local ok, query = pcall(vim.treesitter.query.parse, lang, query_string)
-  if not ok then return {} end
 
-  local parser = vim.treesitter.get_parser(bufnr, lang)
-  if not parser then return {} end
+  local file = io.open(filepath, "r")
+  if not file then return {} end
+  local content = file:read("*a")
+  file:close()
+  
+  if content == "" then return {} end
+
+  local ok, parser = pcall(vim.treesitter.get_string_parser, content, lang)
+  if not ok or not parser then return {} end
   
   local tree = parser:parse()[1]
+  if not tree then return {} end
   local root = tree:root()
   
+  local ok_query, query = pcall(vim.treesitter.query.parse, lang, query_string)
+  if not ok_query then return {} end
+
   local chunks = {}
-  for id, node, m in query:iter_captures(root, bufnr, 0, -1) do
-    local name = vim.treesitter.get_node_text(node, bufnr)
-    local start_row, _, end_row, _ = node:range()
-    
-    local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row + 1, false)
-    local text = table.concat(lines, "\n")
-    
-    table.insert(chunks, {
+  -- Split lines efficiently
+  local lines = vim.split(content, "\n", {plain=true})
+
+  for id, node, m in query:iter_captures(root, content, 0, -1) do
+    local name = vim.treesitter.get_node_text(node, content)
+    local parent = node:parent()
+    if parent then
+      local start_row, start_col, end_row, end_col = parent:range()
+      
+      local snippet_lines = {}
+      for i = start_row + 1, end_row + 1 do
+        if lines[i] then
+          table.insert(snippet_lines, lines[i])
+        end
+      end
+      local text = table.concat(snippet_lines, "\n")
+      
+      table.insert(chunks, {
         name = name,
         line = start_row + 1,
-        text = text
-    })
+        text = text,
+        file = filepath:gsub(vim.fn.getcwd() .. "/", "") -- Make relative to cwd
+      })
+    end
   end
+  
   return chunks
 end
 

@@ -1,3 +1,121 @@
--- Placeholder
 local M = {}
+
+local job_id = nil
+local callbacks = {}
+local req_id = 0
+local deps_checked = false
+
+function M.check_and_install_deps(callback)
+  if deps_checked then 
+    if callback then callback(true) end
+    return 
+  end
+  
+  if vim.fn.executable("python3") == 0 then
+    vim.schedule(function()
+      vim.notify("sem-search: python3 executable not found in PATH!", vim.log.levels.ERROR)
+    end)
+    if callback then callback(false) end
+    return
+  end
+
+  -- Check if dependencies exist
+  vim.fn.jobstart({"python3", "-c", "import faiss, numpy, ollama"}, {
+    on_exit = function(_, code)
+      if code == 0 then
+        deps_checked = true
+        if callback then callback(true) end
+      else
+        -- Dependencies missing, prompt user
+        vim.schedule(function()
+          vim.ui.select({'Yes, install automatically', 'No, cancel'}, {
+            prompt = 'sem-search.nvim: Missing Python dependencies (faiss-cpu, numpy, ollama). Install now?'
+          }, function(choice)
+            if choice == 'Yes, install automatically' then
+              vim.notify("sem-search: Installing background dependencies... This might take a minute.", vim.log.levels.INFO)
+              
+              vim.fn.jobstart({"python3", "-m", "pip", "install", "faiss-cpu", "numpy", "ollama"}, {
+                on_exit = function(_, install_code)
+                  vim.schedule(function()
+                    if install_code == 0 then
+                      deps_checked = true
+                      vim.notify("sem-search: Dependencies installed successfully!", vim.log.levels.INFO)
+                      if callback then callback(true) end
+                    else
+                      vim.notify("sem-search: Failed to install dependencies automatically.", vim.log.levels.ERROR)
+                      if callback then callback(false) end
+                    end
+                  end)
+                end
+              })
+            else
+              vim.notify("sem-search: Dependencies are required for semantic search to run.", vim.log.levels.WARN)
+              if callback then callback(false) end
+            end
+          end)
+        end)
+      end
+    end
+  })
+end
+
+function M.start_server(cb)
+  if job_id then 
+    if cb then cb(true) end
+    return 
+  end
+  
+  M.check_and_install_deps(function(ok)
+    if not ok then
+      if cb then cb(false) end
+      return
+    end
+
+    local script_path = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h") .. "/python/faiss_server.py"
+    
+    job_id = vim.fn.jobstart({"python3", "-u", script_path}, {
+      on_stdout = function(_, data)
+        if not data then return end
+        for _, line in ipairs(data) do
+          if line and line ~= "" then
+            local ok_json, decoded = pcall(vim.fn.json_decode, line)
+            if ok_json and decoded and decoded.id and callbacks[decoded.id] then
+              callbacks[decoded.id](decoded.result, decoded.error)
+              callbacks[decoded.id] = nil
+            end
+          end
+        end
+      end,
+      on_stderr = function(_, data)
+        -- Keep errors silent on std_err or log if debugging
+      end,
+      on_exit = function()
+        job_id = nil
+      end
+    })
+    
+    if cb then cb(job_id ~= nil) end
+  end)
+end
+
+function M.request(cmd, args, callback)
+  M.start_server(function(ok)
+    if not ok then 
+      if callback then callback(nil, "Failed to start server or missing dependencies") end
+      return 
+    end
+    
+    req_id = req_id + 1
+    callbacks[req_id] = callback
+    
+    local payload = vim.fn.json_encode({
+      id = req_id,
+      cmd = cmd,
+      args = args or {}
+    })
+    
+    vim.fn.chansend(job_id, payload .. "\n")
+  end)
+end
+
 return M
