@@ -50,7 +50,13 @@ function M.exit_cycle_mode()
 end
 
 function M.setup_cycle_keybinds()
-  if M.cycling_active then return end
+  if M.cycling_active then
+    -- rebind if already active to ensure they didn't get overwritten
+    vim.keymap.set('n', '<C-n>', function() M.cycle_result(1) end, { desc = "SemSearch Next" })
+    vim.keymap.set('n', '<C-p>', function() M.cycle_result(-1) end, { desc = "SemSearch Prev" })
+    vim.keymap.set('n', '<C-c>', function() M.exit_cycle_mode() end, { desc = "SemSearch Exit Mode" })
+    return
+  end
   M.cycling_active = true
   
   vim.notify("SemSearch Cycle Mode: <C-n> Next, <C-p> Prev, <C-c> Exit", vim.log.levels.INFO)
@@ -95,9 +101,9 @@ function M.search(opts)
   opts = opts or {}
   
   if M.app_state == "results" or M.app_state == "ready" then
+    -- Don't clear M.current_results here, we might want to cycle through them
+    -- Only clear when starting a new search
     M.app_state = "ready"
-    M.current_results = {}
-    M.active_res_idx = nil
   end
   
   local current_file = vim.api.nvim_buf_get_name(0)

@@ -1,9 +1,45 @@
+import re
 import sys
 import json
 import os
 import faiss
 import numpy as np
 import ollama
+
+
+def find_best_line(query, code_text):
+    if not code_text: return 0
+    query_terms = [t.lower() for t in re.findall(r'[a-zA-Z0-9_]+', query)]
+    if not query_terms: return 0
+    
+    stop_words = {'and', 'the', 'for', 'that', 'this', 'with', 'from', 'have', 'has', 'function', 'local', 'return', 'end', 'then', 'else', 'elseif'}
+    filtered_terms = [t for t in query_terms if list(t) and len(t) > 2 and t not in stop_words]
+    if not filtered_terms:
+        filtered_terms = query_terms # fallback if all are stop words
+        
+    lines = code_text.split('\n')
+    best_idx = 0
+    best_score = -1
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+        score = 0
+        for term in filtered_terms:
+            if term in line_lower:
+                score += 1
+                if re.search(r'\b' + re.escape(term) + r'\b', line_lower):
+                    score += 1
+            elif term.endswith('s') and term[:-1] in line_lower:
+                score += 0.5
+            elif term.endswith('ing') and term[:-3] in line_lower:
+                score += 0.5
+            elif term.endswith('ed') and term[:-2] in line_lower:
+                score += 0.5
+        if score > best_score:
+            best_score = score
+            best_idx = i
+    if best_score <= 0:
+        return 0
+    return best_idx
 
 class CodeIndex:
     def __init__(self, index_path):
@@ -82,10 +118,27 @@ class CodeIndex:
                     # A raw 0.74 cosine similarity is actually an extremely good match for Nomic.
                     ui_score = min(100.0, max(0.0, ((score_val - 0.3) / 0.5) * 100))
                     
+                    base_line = chunk.get('line', 1)
+                    code_text = chunk.get('code_text', '')
+                    if code_text:
+                        offset = find_best_line(query, code_text)
+                    else:
+                        # Fallback using 'text'
+                        full_text = chunk.get('text', '')
+                        full_offset = find_best_line(query, full_text)
+                        # subtract header lines if needed
+                        header_lines = 0
+                        for tline in full_text.split('\n')[:3]:
+                            if tline.startswith('File: ') or tline.startswith('Context: '):
+                                header_lines += 1
+                            else:
+                                break
+                        offset = max(0, full_offset - header_lines)
+                        
                     results.append({
                         "score": round(ui_score, 1),
                         "file": chunk.get('file', ''),
-                        "line": chunk.get('line', 1),
+                        "line": base_line + offset,
                         "func": chunk.get('name', ''),
                         "snippet": chunk.get('text', '')
                     })

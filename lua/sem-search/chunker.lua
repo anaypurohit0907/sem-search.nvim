@@ -72,6 +72,7 @@ function M.get_chunks_from_file(filepath)
         name = node_name,
         line = i,
         text = enhanced_text,
+        code_text = text,
         file = rel_file
       })
     end
