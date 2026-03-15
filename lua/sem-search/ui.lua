@@ -155,6 +155,12 @@ function M.search(opts)
   vim.keymap.set('n', 'q', close_ui, { buffer = results_buf, noremap = true, silent = true })
   vim.keymap.set('n', '<Esc>', close_ui, { buffer = results_buf, noremap = true, silent = true })
   vim.keymap.set('n', '<CR>', function() jump_to_result(nil) end, { buffer = results_buf, noremap = true, silent = true })
+  vim.keymap.set('n', '<C-n>', function()
+    if vim.api.nvim_win_is_valid(prompt_win) then
+      vim.api.nvim_set_current_win(prompt_win)
+      vim.cmd('startinsert')
+    end
+  end, { buffer = results_buf, noremap = true, silent = true })
 
   -- Setup keymaps for prompt if we are currently prompting
   local function setup_prompt_keys()
@@ -222,7 +228,9 @@ function M.search(opts)
        M.progress_msg = msg
     end,
     on_error = function(msg)
-       M.app_state = "ready"
+       local_ready_drawn = false
+       M.error_msg = msg
+       M.app_state = "error"
        vim.notify("SemSearch: " .. msg, vim.log.levels.ERROR)
     end
   }
@@ -258,6 +266,14 @@ function M.search(opts)
       vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, {str})
       frame = (frame % #spinner_frames) + 1
       
+    elseif M.app_state == "error" and not local_ready_drawn then
+      local_ready_drawn = true
+      pcall(vim.api.nvim_win_set_config, results_win, { title = ' ❌ Error ' })
+      vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, {"", "  " .. tostring(M.error_msg or "Unknown error"), "", "  Press Enter to try again."})
+      if vim.api.nvim_get_current_win() == prompt_win then
+         vim.cmd('startinsert')
+      end
+
     elseif M.app_state == "ready" and not local_ready_drawn then
       local_ready_drawn = true
       local title_str = file_filter and ' 🎯 Semantic Search (File) ' or ' 🎯 Semantic Search (Workspace) '
@@ -270,15 +286,61 @@ function M.search(opts)
     elseif M.app_state == "results" and not local_results_drawn then
       local_results_drawn = true
       local lines = {}
-      for _, res in ipairs(M.current_results) do
-           local snip = tostring(res.snippet or ""):gsub("\n", " "):gsub("^%s*", ""):sub(1, 40)
+      local highlights = {}
+      local ns_id = vim.api.nvim_create_namespace("sem_search_hl")
+      
+      for i, res in ipairs(M.current_results) do
+           local snip = tostring(res.snippet or ""):gsub("\n", " "):gsub("\r", ""):gsub("^%s*", "")
            local file_path = vim.fn.fnamemodify(res.file, ":~:.")
            local func = res.func and res.func ~= "" and (" [" .. res.func .. "]") or ""
-           table.insert(lines, string.format(" %2d%% │ %s:%s%s │ %s", res.score, file_path, res.line, func, snip))
+           
+           local score_num = tonumber(res.score) or 0
+           local score_hl = "DiagnosticError"
+           if score_num >= 80 then score_hl = "DiagnosticOk"
+           elseif score_num >= 50 then score_hl = "DiagnosticWarn" end
+           
+           local score_str = string.format(" %3d%% ", score_num)
+           local file_str = string.format("│ %s:%s%s ", file_path, res.line, func)
+           
+           local prefix = score_str .. file_str .. "│ "
+           local prefix_len = vim.fn.strdisplaywidth(prefix)
+           local avail_len = math.max(0, width - prefix_len - 1)
+           
+           if #snip > avail_len then
+             snip = snip:sub(1, math.max(0, avail_len - 3)) .. "..."
+           elseif #snip < avail_len then
+             snip = snip .. string.rep(" ", avail_len - #snip)
+           end
+           
+           table.insert(lines, prefix .. snip)
+           
+           table.insert(highlights, {
+              line = i - 1,
+              score_hl = score_hl,
+              score_end = #score_str,
+              file_start = #score_str + 3,
+              file_end = #score_str + 3 + #file_path + 1 + #(tostring(res.line)),
+              func_start = func ~= "" and (#score_str + 3 + #file_path + 1 + #(tostring(res.line)) + 2) or nil,
+              func_end = func ~= "" and (#score_str + 3 + #file_path + 1 + #(tostring(res.line)) + #func) or nil,
+              snip_start = #prefix,
+           })
         end
       if #lines == 0 then lines = {"  No results found."} end
       
       vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
+      vim.api.nvim_buf_clear_namespace(results_buf, ns_id, 0, -1)
+      
+      if #M.current_results > 0 then
+        for _, h in ipairs(highlights) do
+           vim.api.nvim_buf_add_highlight(results_buf, ns_id, h.score_hl, h.line, 0, h.score_end)
+           vim.api.nvim_buf_add_highlight(results_buf, ns_id, "Directory", h.line, h.file_start, h.file_end)
+           if h.func_start then
+             vim.api.nvim_buf_add_highlight(results_buf, ns_id, "Function", h.line, h.func_start, h.func_end)
+           end
+           vim.api.nvim_buf_add_highlight(results_buf, ns_id, "Comment", h.line, h.snip_start, -1)
+        end
+      end
+
       local scope_str = file_filter and "File" or "Workspace"
       pcall(vim.api.nvim_win_set_config, results_win, { title = ' 🎯 Semantic Search ' .. scope_str .. ' (' .. #M.current_results .. ' matches) ' })
       pcall(vim.api.nvim_win_set_cursor, results_win, {1, 0})
@@ -311,8 +373,9 @@ function M.search(opts)
     index.search(query, { file_filter = file_filter }, function(results, err)
       vim.schedule(function()
         if err then
-          vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, {"  Error: " .. tostring(err)})
-          M.app_state = "ready"
+          M.error_msg = err
+          M.app_state = "error"
+          local_ready_drawn = false
           return
         end
 

@@ -75,7 +75,7 @@ class CodeIndex:
                         continue
                         
                     results.append({
-                        "score": round(score_val * 100, 1),
+                        "score": max(0.0, min(100.0, round(score_val * 100, 1))),
                         "file": chunk.get('file', ''),
                         "line": chunk.get('line', 1),
                         "func": chunk.get('name', ''),
