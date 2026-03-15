@@ -19,16 +19,28 @@ local function get_all_files()
   if vim.fn.isdirectory(".git") == 1 and vim.fn.executable("git") == 1 then
     files = vim.fn.systemlist("git ls-files")
   elseif vim.fn.executable("rg") == 1 then
-    files = vim.fn.systemlist("rg --files")
+    files = vim.fn.systemlist("rg --files --hidden -g '!.git/'")
+  else
+    files = vim.fn.systemlist("find . -type f -not -path '*/\\.git/*'")
   end
   
+  if #files == 0 then
+    -- Absolute fallback
+    files = vim.fn.systemlist("find . -type f -not -path '*/\\.git/*'")
+  end
+  
+  local clean_files = {}
   local cwd = vim.fn.getcwd()
-  for i, f in ipairs(files) do
-    if not f:match("^/") then
-      files[i] = cwd .. "/" .. f
+  for _, f in ipairs(files) do
+    if f and f ~= "" and not f:match("%.git/") and not f:match("%.png$") and not f:match("%.jpg$") then
+      if not f:match("^/") then
+        table.insert(clean_files, cwd .. "/" .. f)
+      else
+        table.insert(clean_files, f)
+      end
     end
   end
-  return files
+  return clean_files
 end
 
 function M.init(callback, ctx)

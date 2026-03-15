@@ -18,8 +18,8 @@ function M.get_chunks_from_file(filepath)
     rel_file = string.sub(filepath, #cwd + 2)
   end
 
-  local chunk_size = 20
-  local overlap = 5
+  local chunk_size = 50
+  local overlap = 15
 
   local i = 1
   while i <= #lines do
@@ -31,10 +31,26 @@ function M.get_chunks_from_file(filepath)
     
     local text = table.concat(snippet_lines, "\n")
     if text:gsub("%s+", "") ~= "" then
+      local enhanced_text = "File: " .. rel_file .. "\n" .. text
+      
+      -- Attempt to find a meaningful semantic name (function, class, struct, etc.) for UI
+      local node_name = ""
+      local found_fn = text:match("function%s+([%w_%.%:]+)%s*%(") 
+                    or text:match("func%s+([%w_]+)%s*%(")
+                    or text:match("class%s+([%w_]+)")
+                    or text:match("fn%s+([%w_]+)")
+                    or text:match("fn%s+[%w_]+%([%w_%*%,%s]-%)%s+([%w_]+)")
+                    or text:match("(%w+)%s*=%s*%(.*%)%s*=>")
+                    or text:match("(%w+)%s*=%s*function%s*%(")
+      
+      if found_fn then
+        node_name = found_fn
+      end
+      
       table.insert(chunks, {
-        name = "Lines " .. i .. "-" .. end_idx,
+        name = node_name,
         line = i,
-        text = text,
+        text = enhanced_text,
         file = rel_file
       })
     end

@@ -61,12 +61,13 @@ class CodeIndex:
                     break
                 
                 score_val = float(scores[0][i])
+                
                 # In normalized cosine similarity, reject items that are severely less relevant than the best
-                # or if they fall below a baseline floor (e.g. < 0.4 meaning totally unrelated)
-                if score_val < 0.4 and len(results) > 0:
+                # or if they fall below a baseline floor (e.g. < 0.3 meaning totally unrelated)
+                if score_val < 0.3 and len(results) > 0:
                     break
-                # Only keep results within a reasonable margin of the absolute best match
-                if i > 0 and score_val < best_score - 0.15:
+                # Only keep results within a reasonable margin of the absolute best match (widened for larger line chunks)
+                if i > 0 and score_val < best_score - 0.25:
                     break
                     
                 if 0 <= idx < len(self.chunks) and idx >= 0:
