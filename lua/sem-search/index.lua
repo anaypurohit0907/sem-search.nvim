@@ -88,7 +88,7 @@ function M.reindex(callback, ctx)
   
   if ctx and ctx.on_index_progress then ctx.on_index_progress("Generating embeddings (" .. #all_chunks .. " chunks). This may take a minute...") end
   
-  faiss.request("add_chunks", { chunks = all_chunks }, function(res, err)
+  faiss.request("add_chunks", { chunks = all_chunks, model = config.options.embed_model }, function(res, err)
     if err then 
       M.is_indexing = false
       if ctx and ctx.on_error then ctx.on_error("Error indexing chunks: " .. err) end
@@ -117,7 +117,7 @@ function M.search(query, callback, ctx)
     return
   end
   
-  faiss.request("search", { query = query, k = config.options.max_results }, callback, ctx)
+  faiss.request("search", { query = query, k = config.options.max_results, model = config.options.embed_model }, callback, ctx)
 end
 
 return M

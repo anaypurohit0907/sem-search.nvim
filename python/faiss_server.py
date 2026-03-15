@@ -20,16 +20,15 @@ class CodeIndex:
         else:
             self.index = faiss.IndexFlatIP(768)
 
-    def add_chunks(self, chunks):
+    def add_chunks(self, chunks, model="nomic-embed-text"):
         embeds = []
         for c in chunks:
             try:
-                emb = ollama.embeddings(model='nomic-embed-text', prompt=c['text'])['embedding']
+                emb = ollama.embeddings(model=model, prompt=c['text'])['embedding']
                 embeds.append(emb)
                 self.chunks.append(c)
             except Exception as e:
-                # log exception internally if required
-                pass
+                raise Exception(f"Failed embedding chunk (is model '{model}' pulled?): {str(e)}")
         
         if embeds:
             self.index.add(np.array(embeds).astype('f32'))
@@ -40,11 +39,11 @@ class CodeIndex:
         with open(self.meta_file, 'w') as f:
             json.dump(self.chunks, f)
 
-    def search(self, query, k=10):
+    def search(self, query, k=10, model="nomic-embed-text"):
         if self.index.ntotal == 0:
             return []
         try:
-            q_emb = ollama.embeddings(model='nomic-embed-text', prompt=query)['embedding']
+            q_emb = ollama.embeddings(model=model, prompt=query)['embedding']
             scores, indices = self.index.search(np.array([q_emb]).astype('f32'), k)
             
             results = []
@@ -61,7 +60,7 @@ class CodeIndex:
                     })
             return results
         except Exception as e:
-            return [{"error": str(e)}]
+            raise Exception(f"Search embedding failed (is model '{model}' pulled?): {str(e)}")
 
 def main():
     idx_instance = None
@@ -83,7 +82,7 @@ def main():
                 res["result"] = {"status": "ok", "total": idx_instance.index.ntotal}
             elif cmd == "add_chunks":
                 if idx_instance:
-                    idx_instance.add_chunks(args.get("chunks", []))
+                    idx_instance.add_chunks(args.get("chunks", []), args.get("model", "nomic-embed-text"))
                     res["result"] = "ok"
                 else:
                     res["error"] = "not initialized"
@@ -95,7 +94,7 @@ def main():
                     res["error"] = "not initialized"
             elif cmd == "search":
                 if idx_instance:
-                    hits = idx_instance.search(args.get("query"), args.get("k", 10))
+                    hits = idx_instance.search(args.get("query"), args.get("k", 10), args.get("model", "nomic-embed-text"))
                     res["result"] = hits
                 else:
                     res["error"] = "not initialized"

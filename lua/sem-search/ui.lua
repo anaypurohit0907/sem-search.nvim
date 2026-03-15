@@ -146,8 +146,10 @@ function M.search()
 
   -- GUI context passed down
   local ctx = {
-    on_install_prompt = function(resolve)
+    on_install_prompt = function(resolve, msg, submsg)
        M.app_state = "prompt_install"
+       M.prompt_msg = msg or "  📦 Missing Python dependencies detected!"
+       M.prompt_submsg = submsg or "  (faiss-cpu, numpy, ollama)"
        M.pending_resolve = resolve
        setup_prompt_keys()
     end,
@@ -171,7 +173,8 @@ function M.search()
 
     if M.app_state == "prompt_install" then
       local lines = {
-         "", "  📦 Missing Python dependencies detected!", "  (faiss-cpu, numpy, ollama)", "",
+         "", M.prompt_msg or "  📦 Missing Python dependencies detected!", 
+         M.prompt_submsg or "  (faiss-cpu, numpy, ollama)", "",
          "  Type 'y' to install automatically, or 'n' to cancel.", ""
       }
       pcall(vim.api.nvim_win_set_config, results_win, { title = ' ⚙️ Setup Required ' })
