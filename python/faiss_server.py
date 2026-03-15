@@ -24,7 +24,9 @@ class CodeIndex:
         embeds = []
         for c in chunks:
             try:
-                emb = ollama.embeddings(model=model, prompt=c['text'])['embedding']
+                # Nomic-embed-text requires the correct prompt prefix for retrieval tasks
+                prefix = "search_document: " if "nomic-embed-text" in model else ""
+                emb = ollama.embeddings(model=model, prompt=prefix + c['text'])['embedding']
                 embeds.append(emb)
                 self.chunks.append(c)
             except Exception as e:
@@ -49,7 +51,8 @@ class CodeIndex:
         if self.index.ntotal == 0:
             return []
         try:
-            q_emb = np.array([ollama.embeddings(model=model, prompt=query)['embedding']]).astype('float32')
+            prefix = "search_query: " if "nomic-embed-text" in model else ""
+            q_emb = np.array([ollama.embeddings(model=model, prompt=prefix + query)['embedding']]).astype('float32')
             faiss.normalize_L2(q_emb)
             search_k = min(self.index.ntotal, 10000 if file_filter else k)
             scores, indices = self.index.search(q_emb, search_k)
@@ -74,9 +77,13 @@ class CodeIndex:
                     chunk = self.chunks[idx]
                     if file_filter and chunk.get('file', '') != file_filter:
                         continue
-                        
+                    
+                    # Normalize the nomic score (0.4 to 0.8) slightly upwards for nicer UI percentages
+                    # A raw 0.74 cosine similarity is actually an extremely good match for Nomic.
+                    ui_score = min(100.0, max(0.0, ((score_val - 0.3) / 0.5) * 100))
+                    
                     results.append({
-                        "score": max(0.0, min(100.0, round(score_val * 100, 1))),
+                        "score": round(ui_score, 1),
                         "file": chunk.get('file', ''),
                         "line": chunk.get('line', 1),
                         "func": chunk.get('name', ''),
