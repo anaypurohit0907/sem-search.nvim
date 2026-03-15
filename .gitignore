@@ -1,0 +1,5 @@
+# ignores
+.faiss_index
+*.pyc
+__pycache__/
+*.json
