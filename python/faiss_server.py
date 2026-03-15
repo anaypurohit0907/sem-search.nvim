@@ -39,17 +39,22 @@ class CodeIndex:
         with open(self.meta_file, 'w') as f:
             json.dump(self.chunks, f)
 
-    def search(self, query, k=10, model="nomic-embed-text"):
+    def search(self, query, k=10, model="nomic-embed-text", file_filter=None):
         if self.index.ntotal == 0:
             return []
         try:
             q_emb = ollama.embeddings(model=model, prompt=query)['embedding']
-            scores, indices = self.index.search(np.array([q_emb]).astype('float32'), k)
+            search_k = min(self.index.ntotal, 10000) if file_filter else k
+            scores, indices = self.index.search(np.array([q_emb]).astype('float32'), search_k)
             
             results = []
             for i, idx in enumerate(indices[0]):
+                if len(results) >= k:
+                    break
                 if 0 <= idx < len(self.chunks) and idx >= 0:
                     chunk = self.chunks[idx]
+                    if file_filter and chunk.get('file', '') != file_filter:
+                        continue
                     score_val = float(scores[0][i]) * 100
                     results.append({
                         "score": round(score_val, 2),
@@ -94,7 +99,7 @@ def main():
                     res["error"] = "not initialized"
             elif cmd == "search":
                 if idx_instance:
-                    hits = idx_instance.search(args.get("query"), args.get("k", 10), args.get("model", "nomic-embed-text"))
+                    hits = idx_instance.search(args.get("query"), args.get("k", 10), args.get("model", "nomic-embed-text"), args.get("file_filter"))
                     res["result"] = hits
                 else:
                     res["error"] = "not initialized"

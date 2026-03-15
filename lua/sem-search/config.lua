@@ -1,7 +1,7 @@
 local M = {}
 
 M.defaults = {
-  keymap = { search = '<leader>ss', setup = '<leader>uS', reindex = '<leader>si' },
+  keymap = { search = '<leader>ss', workspace_search = '<leader>sw', setup = '<leader>uS', reindex = '<leader>si' },
   ollama_host = 'localhost:11434',
   embed_model = 'nomic-embed-text',
   max_results = 10,

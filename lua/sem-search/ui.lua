@@ -32,7 +32,7 @@ local function jump_to_result(split_cmd)
   if not cursor_ok then return end
 
   local row = cursor[1]
-  local res_idx = math.floor((row + 1) / 2)
+  local res_idx = row
   local res = M.current_results[res_idx]
 
   if res and res.file then
@@ -65,7 +65,7 @@ function M.search()
   local results_win = vim.api.nvim_open_win(results_buf, true, {
     relative = 'editor', width = width, height = height, row = row, col = col,
     style = 'minimal', border = 'rounded', title = ' 🎯 Semantic Search Results ', title_pos = 'center',
-    footer = ' <CR> Jump  <c-v> VSplit  <c-x> Split  yy Copy Path  q/Esc Close ', footer_pos = 'center'
+    footer = ' <CR> Jump  yy Copy Path  q/Esc Close ', footer_pos = 'center'
   })
   
   active_win = results_win
@@ -93,8 +93,32 @@ function M.search()
   vim.keymap.set('n', 'q', close_ui, { buffer = results_buf, noremap = true, silent = true })
   vim.keymap.set('n', '<Esc>', close_ui, { buffer = results_buf, noremap = true, silent = true })
   vim.keymap.set('n', '<CR>', function() jump_to_result(nil) end, { buffer = results_buf, noremap = true, silent = true })
-  vim.keymap.set('n', '<C-v>', function() jump_to_result("vsplit") end, { buffer = results_buf, noremap = true, silent = true })
-  vim.keymap.set('n', '<C-x>', function() jump_to_result("split") end, { buffer = results_buf, noremap = true, silent = true })
+    vim.keymap.set({'n', 'i'}, '<C-j>', function() 
+      if not vim.api.nvim_win_is_valid(results_win) then return end
+      local cur = vim.api.nvim_win_get_cursor(results_win)
+      local max_line = vim.api.nvim_buf_line_count(results_buf)
+      if cur[1] < max_line then vim.api.nvim_win_set_cursor(results_win, {cur[1] + 1, 0}) end
+    end, { buffer = prompt_buf, noremap = true, silent = true })
+    vim.keymap.set({'n', 'i'}, '<C-k>', function() 
+      if not vim.api.nvim_win_is_valid(results_win) then return end
+      local cur = vim.api.nvim_win_get_cursor(results_win)
+      if cur[1] > 1 then vim.api.nvim_win_set_cursor(results_win, {cur[1] - 1, 0}) end
+    end, { buffer = prompt_buf, noremap = true, silent = true })
+    vim.keymap.set('n', 'j', function() 
+      if not vim.api.nvim_win_is_valid(results_win) then return end
+      local cur = vim.api.nvim_win_get_cursor(results_win)
+      local max_line = vim.api.nvim_buf_line_count(results_buf)
+      if cur[1] < max_line then vim.api.nvim_win_set_cursor(results_win, {cur[1] + 1, 0}) end
+    end, { buffer = prompt_buf, noremap = true, silent = true })
+    vim.keymap.set('n', 'k', function() 
+      if not vim.api.nvim_win_is_valid(results_win) then return end
+      local cur = vim.api.nvim_win_get_cursor(results_win)
+      if cur[1] > 1 then vim.api.nvim_win_set_cursor(results_win, {cur[1] - 1, 0}) end
+    end, { buffer = prompt_buf, noremap = true, silent = true })
+    vim.keymap.set({'n', 'i'}, '<CR>', function() 
+      if vim.api.nvim_get_mode().mode:match('i') then vim.cmd('stopinsert') end
+      jump_to_result(nil)
+    end, { buffer = prompt_buf, noremap = true, silent = true })
 
   -- Setup keymaps for prompt if we are currently prompting
   local function setup_prompt_keys()
@@ -210,10 +234,11 @@ function M.search()
       local_results_drawn = true
       local lines = {}
       for _, res in ipairs(M.current_results) do
-         table.insert(lines, string.format(" %d%%  %s:%s  %s", res.score, res.file, res.line, res.func))
-         local snip = tostring(res.snippet or ""):gsub("\n", " "):sub(1, 60)
-         table.insert(lines, string.format(" ├─ %s", snip))
-      end
+           local snip = tostring(res.snippet or ""):gsub("\n", " "):gsub("^%s*", ""):sub(1, 40)
+           local file_path = vim.fn.fnamemodify(res.file, ":~:.")
+           local func = res.func and res.func ~= "" and (" [" .. res.func .. "]") or ""
+           table.insert(lines, string.format(" %2d%% │ %s:%s%s │ %s", res.score, file_path, res.line, func, snip))
+        end
       if #lines == 0 then lines = {"  No results found."} end
       
       vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)

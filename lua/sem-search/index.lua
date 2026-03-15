@@ -104,10 +104,17 @@ function M.reindex(callback, ctx)
   end, ctx)
 end
 
-function M.search(query, callback, ctx)
+function M.search(query, in_opts, callback, ctx)
+  if type(in_opts) == "function" then
+    ctx = callback
+    callback = in_opts
+    in_opts = {}
+  end
+  in_opts = in_opts or {}
+
   if not initialized then
     M.init(function()
-      M.search(query, callback, ctx)
+      M.search(query, in_opts, callback, ctx)
     end, ctx)
     return
   end
@@ -117,7 +124,13 @@ function M.search(query, callback, ctx)
     return
   end
   
-  faiss.request("search", { query = query, k = config.options.max_results, model = config.options.embed_model }, callback, ctx)
+  local req_args = {
+    query = query,
+    k = config.options.max_results,
+    model = config.options.embed_model,
+    file_filter = in_opts.file_filter
+  }
+  faiss.request("search", req_args, callback, ctx)
 end
 
 return M

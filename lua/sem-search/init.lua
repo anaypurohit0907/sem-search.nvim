@@ -14,7 +14,8 @@ function M.setup(opts)
 
   -- Keybindings
   local k = config.options.keymap
-  vim.keymap.set('n', k.search, function() ui.search() end, { desc = "Semantic Search" })
+  vim.keymap.set('n', k.search, function() ui.search({ workspace = false }) end, { desc = "Semantic Search (Current File)" })
+  vim.keymap.set('n', k.workspace_search, function() ui.search({ workspace = true }) end, { desc = "Semantic Search (Workspace)" })
   vim.keymap.set('n', k.setup, function() print("Toggle config not fully implemented") end, { desc = "SemSearch Config" })
   vim.keymap.set('n', k.reindex, function() index.reindex() end, { desc = "SemSearch Reindex" })
 end
