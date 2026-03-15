@@ -31,47 +31,49 @@ local function get_all_files()
   return files
 end
 
-function M.init(callback)
+function M.init(callback, ctx)
   if initialized then 
     if callback then callback() end
     return 
   end
   
-  -- Prevent multiple rapid initializations
   if M.is_indexing then return end
   
   faiss.request("init", { index_path = get_index_path() }, function(res, err)
     if not err and res then
       initialized = true
-      -- If total chunks == 0, it means it's the first time running in this workspace
       if res.total == 0 and config.options.auto_index then
         vim.schedule(function() 
-          M.reindex(callback)
+          M.reindex(callback, ctx)
         end)
       else
         if callback then vim.schedule(callback) end
       end
     else
-      vim.notify("Failed to init semantic search: " .. (err or "unknown input"), vim.log.levels.ERROR)
+      if ctx and ctx.on_error then 
+          ctx.on_error("Failed to init semantic search: " .. (err or "unknown input")) 
+      else
+          vim.notify("Failed to init semantic search", vim.log.levels.ERROR)
+      end
     end
-  end)
+  end, ctx)
 end
 
-function M.reindex(callback)
-  if M.is_indexing then
-    vim.notify("Index build already in progress...", vim.log.levels.INFO)
-    return
-  end
+function M.reindex(callback, ctx)
+  if M.is_indexing then return end
+  
+  M.is_indexing = true
+  if ctx and ctx.on_index_progress then ctx.on_index_progress("Discovering files...") end
   
   local files = get_all_files()
   if #files == 0 then
-    vim.notify("SemSearch: No files discovered.", vim.log.levels.WARN)
+    if ctx and ctx.on_error then ctx.on_error("SemSearch: No files discovered.") end
+    M.is_indexing = false
     return
   end
   
-  M.is_indexing = true
+  if ctx and ctx.on_index_progress then ctx.on_index_progress("Extracting code chunks locally...") end
   
-  -- Extract efficiently 
   local all_chunks = {}
   for _, f in ipairs(files) do
     local chunks = treesitter.get_chunks_from_file(f)
@@ -80,27 +82,29 @@ function M.reindex(callback)
     end
   end
   
-  vim.notify("🚀 SemSearch: First time in this workspace! Building semantics index with Ollama (" .. #all_chunks .. " chunks). Please wait...", vim.log.levels.INFO)
+  if ctx and ctx.on_index_progress then ctx.on_index_progress("Generating embeddings (" .. #all_chunks .. " chunks). This may take a minute...") end
   
   faiss.request("add_chunks", { chunks = all_chunks }, function(res, err)
     if err then 
       M.is_indexing = false
-      vim.notify("Error indexing chunks: " .. err, vim.log.levels.ERROR)
+      if ctx and ctx.on_error then ctx.on_error("Error indexing chunks: " .. err) end
       return
     end
+    
+    if ctx and ctx.on_index_progress then ctx.on_index_progress("Saving index to disk...") end
+    
     faiss.request("save", {}, function()
       M.is_indexing = false
-      vim.notify("✅ SemSearch: Index properly built and saved! Search is fully ready.", vim.log.levels.INFO)
       if callback then vim.schedule(callback) end
-    end)
-  end)
+    end, ctx)
+  end, ctx)
 end
 
-function M.search(query, callback)
+function M.search(query, callback, ctx)
   if not initialized then
     M.init(function()
-      M.search(query, callback)
-    end)
+      M.search(query, callback, ctx)
+    end, ctx)
     return
   end
   
@@ -109,7 +113,7 @@ function M.search(query, callback)
     return
   end
   
-  faiss.request("search", { query = query, k = config.options.max_results }, callback)
+  faiss.request("search", { query = query, k = config.options.max_results }, callback, ctx)
 end
 
 return M

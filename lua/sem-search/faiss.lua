@@ -5,61 +5,55 @@ local callbacks = {}
 local req_id = 0
 local deps_checked = false
 
-function M.check_and_install_deps(callback)
+function M.check_and_install_deps(callback, ctx)
   if deps_checked then 
     if callback then callback(true) end
     return 
   end
   
   if vim.fn.executable("python3") == 0 then
-    vim.schedule(function()
-      vim.notify("sem-search: python3 executable not found in PATH!", vim.log.levels.ERROR)
-    end)
+    if ctx and ctx.on_error then ctx.on_error("python3 executable not found in PATH!") end
     if callback then callback(false) end
     return
   end
 
-  -- Check if dependencies exist
   vim.fn.jobstart({"python3", "-c", "import faiss, numpy, ollama"}, {
     on_exit = function(_, code)
       if code == 0 then
         deps_checked = true
         if callback then callback(true) end
       else
-        -- Dependencies missing, prompt user
-        vim.schedule(function()
-          vim.ui.select({'Yes, install automatically', 'No, cancel'}, {
-            prompt = 'sem-search.nvim: Missing Python dependencies (faiss-cpu, numpy, ollama). Install now?'
-          }, function(choice)
-            if choice == 'Yes, install automatically' then
-              vim.notify("sem-search: Installing background dependencies... This might take a minute.", vim.log.levels.INFO)
-              
+        if ctx and ctx.on_install_prompt then
+          ctx.on_install_prompt(function(choice)
+            if choice then
+              if ctx.on_install_progress then ctx.on_install_progress("Installing faiss-cpu, numpy, ollama...") end
               vim.fn.jobstart({"python3", "-m", "pip", "install", "faiss-cpu", "numpy", "ollama"}, {
                 on_exit = function(_, install_code)
                   vim.schedule(function()
                     if install_code == 0 then
                       deps_checked = true
-                      vim.notify("sem-search: Dependencies installed successfully!", vim.log.levels.INFO)
                       if callback then callback(true) end
                     else
-                      vim.notify("sem-search: Failed to install dependencies automatically.", vim.log.levels.ERROR)
+                      if ctx.on_error then ctx.on_error("Failed to install dependencies.") end
                       if callback then callback(false) end
                     end
                   end)
                 end
               })
             else
-              vim.notify("sem-search: Dependencies are required for semantic search to run.", vim.log.levels.WARN)
               if callback then callback(false) end
             end
           end)
-        end)
+        else
+           vim.notify("sem-search: Missing Python dependencies.", vim.log.levels.ERROR)
+           if callback then callback(false) end
+        end
       end
     end
   })
 end
 
-function M.start_server(cb)
+function M.start_server(cb, ctx)
   if job_id then 
     if cb then cb(true) end
     return 
@@ -80,25 +74,28 @@ function M.start_server(cb)
           if line and line ~= "" then
             local ok_json, decoded = pcall(vim.fn.json_decode, line)
             if ok_json and decoded and decoded.id and callbacks[decoded.id] then
-              callbacks[decoded.id](decoded.result, decoded.error)
+              -- Fix: Neovim JSON decodes `null` to `vim.NIL` which is a userdata type!
+              -- Convert vim.NIL to standard lua `nil` so 'if err' logic flows perfectly inside callbacks.
+              local res = decoded.result == vim.NIL and nil or decoded.result
+              local err = decoded.error == vim.NIL and nil or decoded.error
+              
+              callbacks[decoded.id](res, err)
               callbacks[decoded.id] = nil
             end
           end
         end
       end,
-      on_stderr = function(_, data)
-        -- Keep errors silent on std_err or log if debugging
-      end,
+      on_stderr = function(_, data) end,
       on_exit = function()
         job_id = nil
       end
     })
     
     if cb then cb(job_id ~= nil) end
-  end)
+  end, ctx)
 end
 
-function M.request(cmd, args, callback)
+function M.request(cmd, args, callback, ctx)
   M.start_server(function(ok)
     if not ok then 
       if callback then callback(nil, "Failed to start server or missing dependencies") end
@@ -115,7 +112,7 @@ function M.request(cmd, args, callback)
     })
     
     vim.fn.chansend(job_id, payload .. "\n")
-  end)
+  end, ctx)
 end
 
 return M
