@@ -26,6 +26,40 @@ local tips = {
 local active_win = nil
 local active_buf = nil
 
+function M.cycle_result(dir)
+  if not M.current_results or #M.current_results == 0 then return end
+  M.active_res_idx = (M.active_res_idx or 1) + dir
+  if M.active_res_idx > #M.current_results then M.active_res_idx = 1 end
+  if M.active_res_idx < 1 then M.active_res_idx = #M.current_results end
+  
+  local res = M.current_results[M.active_res_idx]
+  if res and res.file then
+    vim.cmd("edit " .. res.file)
+    pcall(vim.api.nvim_win_set_cursor, 0, {res.line, 0})
+    vim.cmd("normal! zz")
+    vim.notify(string.format("SemSearch: Result %d/%d in %s", M.active_res_idx, #M.current_results, vim.fn.fnamemodify(res.file, ":t")), vim.log.levels.INFO)
+  end
+end
+
+function M.exit_cycle_mode()
+  M.cycling_active = false
+  pcall(vim.keymap.del, 'n', '<C-n>')
+  pcall(vim.keymap.del, 'n', '<C-p>')
+  pcall(vim.keymap.del, 'n', '<C-c>')
+  vim.notify("SemSearch Cycle Mode Exit", vim.log.levels.INFO)
+end
+
+function M.setup_cycle_keybinds()
+  if M.cycling_active then return end
+  M.cycling_active = true
+  
+  vim.notify("SemSearch Cycle Mode: <C-n> Next, <C-p> Prev, <C-c> Exit", vim.log.levels.INFO)
+  
+  vim.keymap.set('n', '<C-n>', function() M.cycle_result(1) end, { desc = "SemSearch Next" })
+  vim.keymap.set('n', '<C-p>', function() M.cycle_result(-1) end, { desc = "SemSearch Prev" })
+  vim.keymap.set('n', '<C-c>', function() M.exit_cycle_mode() end, { desc = "SemSearch Exit Mode" })
+end
+
 local function jump_to_result(split_cmd)
   if not active_win or not vim.api.nvim_win_is_valid(active_win) then return end
   local cursor_ok, cursor = pcall(vim.api.nvim_win_get_cursor, active_win)
@@ -36,11 +70,14 @@ local function jump_to_result(split_cmd)
   local res = M.current_results[res_idx]
 
   if res and res.file then
-    vim.cmd('q')
+    if M.close_ui then M.close_ui() else vim.cmd('q') end
     if split_cmd then vim.cmd(split_cmd) end
     vim.cmd("edit " .. res.file)
     pcall(vim.api.nvim_win_set_cursor, 0, {res.line, 0})
     vim.cmd("normal! zz")
+    
+    M.active_res_idx = res_idx
+    M.setup_cycle_keybinds()
   end
 end
 
@@ -104,6 +141,7 @@ function M.search(opts)
     if vim.api.nvim_win_is_valid(results_win) then vim.api.nvim_win_close(results_win, true) end
     if vim.api.nvim_win_is_valid(prompt_win) then vim.api.nvim_win_close(prompt_win, true) end
   end
+  M.close_ui = close_ui
 
   vim.keymap.set('n', 'q', close_ui, { buffer = prompt_buf, noremap = true, silent = true })
   vim.keymap.set({'n', 'i'}, '<Esc>', close_ui, { buffer = prompt_buf, noremap = true, silent = true })

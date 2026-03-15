@@ -88,18 +88,26 @@ function M.reindex(callback, ctx)
   
   if ctx and ctx.on_index_progress then ctx.on_index_progress("Generating embeddings (" .. #all_chunks .. " chunks). This may take a minute...") end
   
-  faiss.request("add_chunks", { chunks = all_chunks, model = config.options.embed_model }, function(res, err)
-    if err then 
+  faiss.request("clear", {}, function(clear_res, clear_err)
+    if clear_err then
       M.is_indexing = false
-      if ctx and ctx.on_error then ctx.on_error("Error indexing chunks: " .. err) end
+      if ctx and ctx.on_error then ctx.on_error("Error clearing old index: " .. clear_err) end
       return
     end
     
-    if ctx and ctx.on_index_progress then ctx.on_index_progress("Saving index to disk...") end
-    
-    faiss.request("save", {}, function()
-      M.is_indexing = false
-      if callback then vim.schedule(callback) end
+    faiss.request("add_chunks", { chunks = all_chunks, model = config.options.embed_model }, function(res, err)
+      if err then 
+        M.is_indexing = false
+        if ctx and ctx.on_error then ctx.on_error("Error indexing chunks: " .. err) end
+        return
+      end
+      
+      if ctx and ctx.on_index_progress then ctx.on_index_progress("Saving index to disk...") end
+      
+      faiss.request("save", {}, function()
+        M.is_indexing = false
+        if callback then vim.schedule(callback) end
+      end, ctx)
     end, ctx)
   end, ctx)
 end

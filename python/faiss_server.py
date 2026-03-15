@@ -33,6 +33,10 @@ class CodeIndex:
         if embeds:
             self.index.add(np.array(embeds).astype('float32'))
             
+    def clear(self):
+        self.chunks = []
+        self.index = faiss.IndexFlatIP(768)
+
     def save(self):
         os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
         faiss.write_index(self.index, self.index_file)
@@ -85,6 +89,12 @@ def main():
             if cmd == "init":
                 idx_instance = CodeIndex(args.get("index_path"))
                 res["result"] = {"status": "ok", "total": idx_instance.index.ntotal}
+            elif cmd == "clear":
+                if idx_instance:
+                    idx_instance.clear()
+                    res["result"] = "ok"
+                else:
+                    res["error"] = "not initialized"
             elif cmd == "add_chunks":
                 if idx_instance:
                     idx_instance.add_chunks(args.get("chunks", []), args.get("model", "nomic-embed-text"))
