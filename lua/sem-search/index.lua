@@ -51,7 +51,8 @@ function M.init(callback, ctx)
       end
     else
       if ctx and ctx.on_error then 
-          ctx.on_error("Failed to init semantic search: " .. (err or "unknown input")) 
+          local e_str = (type(err) == "userdata") and "unknown userdata error" or tostring(err or "unknown input")
+          ctx.on_error("Failed to init semantic search: " .. e_str) 
       else
           vim.notify("Failed to init semantic search", vim.log.levels.ERROR)
       end

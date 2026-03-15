@@ -61,6 +61,7 @@ function M.search()
   local col = math.floor((vim.o.columns - width) / 2)
 
   local results_buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[results_buf].bufhidden = "wipe"
   local results_win = vim.api.nvim_open_win(results_buf, true, {
     relative = 'editor', width = width, height = height, row = row, col = col,
     style = 'minimal', border = 'rounded', title = ' 🎯 Semantic Search Results ', title_pos = 'center',
@@ -77,6 +78,8 @@ function M.search()
   })
 
   vim.bo[prompt_buf].buftype = 'prompt'
+  vim.bo[prompt_buf].bufhidden = "wipe"
+  vim.bo[prompt_buf].modified = false
   vim.fn.prompt_setprompt(prompt_buf, ' > ')
   vim.cmd('startinsert')
 

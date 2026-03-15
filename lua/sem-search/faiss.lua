@@ -76,8 +76,8 @@ function M.start_server(cb, ctx)
             if ok_json and decoded and decoded.id and callbacks[decoded.id] then
               -- Fix: Neovim JSON decodes `null` to `vim.NIL` which is a userdata type!
               -- Convert vim.NIL to standard lua `nil` so 'if err' logic flows perfectly inside callbacks.
-              local res = decoded.result == vim.NIL and nil or decoded.result
-              local err = decoded.error == vim.NIL and nil or decoded.error
+              local res = (type(decoded.result) == "userdata" or type(decoded.result) == "nil") and nil or decoded.result
+              local err = (type(decoded.error) == "userdata" or type(decoded.error) == "nil") and nil or decoded.error
               
               callbacks[decoded.id](res, err)
               callbacks[decoded.id] = nil
