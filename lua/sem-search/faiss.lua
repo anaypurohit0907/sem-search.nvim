@@ -104,24 +104,32 @@ function M.start_server(cb, ctx)
 
     local script_path = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h") .. "/python/faiss_server.py"
     
+    local stdout_buf = ""
     job_id = vim.fn.jobstart({"python3", "-u", script_path}, {
       on_stdout = function(_, data)
         if not data then return end
-        for _, line in ipairs(data) do
-          if line and line ~= "" then
-            local ok_json, decoded = pcall(vim.fn.json_decode, line)
-            if ok_json and decoded and decoded.id and callbacks[decoded.id] then
-              -- Fix: Neovim JSON decodes `null` to `vim.NIL` which is a userdata type!
-              -- Convert vim.NIL to standard lua `nil` so 'if err' logic flows perfectly inside callbacks.
-              
-              local res = decoded.result
-              if res == vim.NIL or type(res) == "userdata" then res = nil end
-              local err = decoded.error
-              if err == vim.NIL or type(err) == "userdata" then err = nil end
-              
-              local cb = callbacks[decoded.id]
-              callbacks[decoded.id] = nil
-              if cb then cb(res, err) end
+        
+        for i, chunk in ipairs(data) do
+          stdout_buf = stdout_buf .. chunk
+          if i < #data then
+            -- When we are not at the final fragment of the `data` array,
+            -- Neovim implies there was a newline after this chunk.
+            local line = stdout_buf
+            stdout_buf = "" -- Reset buffer for the next line
+            
+            if line ~= "" then
+              local ok_json, decoded = pcall(vim.fn.json_decode, line)
+              if ok_json and decoded and decoded.id and callbacks[decoded.id] then
+                -- Convert vim.NIL to standard lua `nil` so 'if err' logic flows perfectly inside callbacks.
+                local res = decoded.result
+                if res == vim.NIL or type(res) == "userdata" then res = nil end
+                local err = decoded.error
+                if err == vim.NIL or type(err) == "userdata" then err = nil end
+                
+                local cb_func = callbacks[decoded.id]
+                callbacks[decoded.id] = nil
+                if cb_func then cb_func(res, err) end
+              end
             end
           end
         end
