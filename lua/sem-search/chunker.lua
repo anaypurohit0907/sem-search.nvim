@@ -12,6 +12,27 @@ function M.get_chunks_from_file(filepath)
   -- Split lines efficiently
   local lines = vim.split(content, "\n", {plain=true})
 
+  local symbol_lines = {}
+  local current_symbol = ""
+  for idx, line in ipairs(lines) do
+    local found = line:match("^%s*function%s+([%w_%.%:]+)%s*%(") 
+               or line:match("^%s*local%s+function%s+([%w_%.%:]+)%s*%(")
+               or line:match("^%s*func%s+([%w_%.%:]+)%s*%(")
+               or line:match("^%s*class%s+([%w_]+)")
+               or line:match("^%s*fn%s+([%w_]+)")
+               or line:match("^%s*pub%s+fn%s+([%w_]+)")
+               or line:match("^%s*def%s+([%w_]+)")
+               
+    if found then
+      current_symbol = found
+    end
+    -- Very naive reset on top-level block endings
+    if line:match("^}$") or line:match("^end$") then
+      current_symbol = "" 
+    end
+    symbol_lines[idx] = current_symbol
+  end
+
   local cwd = vim.fn.getcwd()
   local rel_file = filepath
   if string.sub(filepath, 1, #cwd) == cwd then
@@ -31,21 +52,21 @@ function M.get_chunks_from_file(filepath)
     
     local text = table.concat(snippet_lines, "\n")
     if text:gsub("%s+", "") ~= "" then
-      local enhanced_text = "File: " .. rel_file .. "\n" .. text
-      
-      -- Attempt to find a meaningful semantic name (function, class, struct, etc.) for UI
+      -- Find the first valid symbol that appears in this chunk
       local node_name = ""
-      local found_fn = text:match("function%s+([%w_%.%:]+)%s*%(") 
-                    or text:match("func%s+([%w_]+)%s*%(")
-                    or text:match("class%s+([%w_]+)")
-                    or text:match("fn%s+([%w_]+)")
-                    or text:match("fn%s+[%w_]+%([%w_%*%,%s]-%)%s+([%w_]+)")
-                    or text:match("(%w+)%s*=%s*%(.*%)%s*=>")
-                    or text:match("(%w+)%s*=%s*function%s*%(")
-      
-      if found_fn then
-        node_name = found_fn
+      for j = i, end_idx do
+        if symbol_lines[j] and symbol_lines[j] ~= "" then
+          node_name = symbol_lines[j]
+          break
+        end
       end
+      
+      local context_str = ""
+      if node_name ~= "" then
+         context_str = "Context: " .. node_name .. "\n"
+      end
+      
+      local enhanced_text = "File: " .. rel_file .. "\n" .. context_str .. text
       
       table.insert(chunks, {
         name = node_name,
