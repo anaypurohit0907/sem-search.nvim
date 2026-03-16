@@ -56,26 +56,51 @@ class CodeIndex:
         else:
             self.index = faiss.IndexFlatIP(768)
 
-    def add_chunks(self, chunks, model="nomic-embed-text"):
-        embeds = []
-        for c in chunks:
+    def add_chunks(self, chunks, model="nomic-embed-text", req_id=None):
+        if not chunks:
+            return
+
+        batch_size = 25
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i : i + batch_size]
             try:
+                if req_id is not None:
+                    pct = int(((i + len(batch)) / len(chunks)) * 100)
+                    sys.stdout.write(json.dumps({
+                        "id": req_id,
+                        "type": "progress",
+                        "msg": f"Embedding chunks {i+1}-{i+len(batch)} of {len(chunks)}...",
+                        "pct": pct
+                    }) + "\n")
+                    sys.stdout.flush()
+
                 # Nomic-embed-text requires the correct prompt prefix for retrieval tasks
                 prefix = "search_document: " if "nomic-embed-text" in model else ""
-                # Use modern ollama.embed() instead of legacy ollama.embeddings()
-                # embed() takes 'input' as a string or list, returns 'embeddings'
-                res = ollama.embed(model=model, input=prefix + str(c['text']))
-                emb = res['embeddings'][0]
-                embeds.append(emb)
-                self.chunks.append(c)
+
+                # Batch process embeddings
+                inputs = [prefix + str(c['text']) for c in batch]
+                res = ollama.embed(model=model, input=inputs)
+
+                # Add embeddings and chunks to index
+                batch_embeds = res['embeddings']
+                for j, emb in enumerate(batch_embeds):
+                    self.chunks.append(batch[j])
+                    # We'll collect all embeddings and add to FAISS at once for efficiency after the loop
+                    # but for now, let's keep it simple and add them to a local list
+
+                if i == 0:
+                    self.all_embeds = list(batch_embeds)
+                else:
+                    self.all_embeds.extend(batch_embeds)
+
             except Exception as e:
-                raise Exception(f"Failed embedding chunk (is model '{model}' pulled?): {str(e)}")
-        
-        if embeds:
-            data = np.array(embeds).astype('float32')
+                raise Exception(f"Failed embedding batch starting at {i}: {str(e)}")
+
+        if hasattr(self, 'all_embeds') and self.all_embeds:
+            data = np.array(self.all_embeds).astype('float32')
             faiss.normalize_L2(data)
             self.index.add(data)
-            
+            del self.all_embeds            
     def clear(self):
         self.chunks = []
         self.index = faiss.IndexFlatIP(768)
@@ -176,7 +201,7 @@ def main():
                     res["error"] = "not initialized"
             elif cmd == "add_chunks":
                 if idx_instance:
-                    idx_instance.add_chunks(args.get("chunks", []), args.get("model", "nomic-embed-text"))
+                    idx_instance.add_chunks(args.get("chunks", []), args.get("model", "nomic-embed-text"), req_id=req_id)
                     res["result"] = "ok"
                 else:
                     res["error"] = "not initialized"

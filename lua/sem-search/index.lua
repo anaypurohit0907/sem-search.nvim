@@ -79,7 +79,9 @@ function M.reindex(callback, ctx)
   if M.is_indexing then return end
   
   M.is_indexing = true
-  if ctx and ctx.on_index_progress then ctx.on_index_progress("Discovering files...") end
+  if ctx then
+    if ctx.on_index_progress then ctx.on_index_progress("Discovering files...", 0) end
+  end
   
   local files = get_all_files()
   if #files == 0 then
@@ -88,7 +90,7 @@ function M.reindex(callback, ctx)
     return
   end
   
-  if ctx and ctx.on_index_progress then ctx.on_index_progress("Extracting code chunks locally...") end
+  if ctx and ctx.on_index_progress then ctx.on_index_progress("Extracting code chunks locally...", 5) end
   
   local all_chunks = {}
   for _, f in ipairs(files) do
@@ -98,7 +100,7 @@ function M.reindex(callback, ctx)
     end
   end
   
-  if ctx and ctx.on_index_progress then ctx.on_index_progress("Generating embeddings (" .. #all_chunks .. " chunks). This may take a minute...") end
+  if ctx and ctx.on_index_progress then ctx.on_index_progress("Generating embeddings (" .. #all_chunks .. " chunks). This may take a minute...", 10) end
   
   faiss.request("clear", {}, function(clear_res, clear_err)
     if clear_err then

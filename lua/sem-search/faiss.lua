@@ -120,15 +120,22 @@ function M.start_server(cb, ctx)
             if line ~= "" then
               local ok_json, decoded = pcall(vim.fn.json_decode, line)
               if ok_json and decoded and decoded.id and callbacks[decoded.id] then
-                -- Convert vim.NIL to standard lua `nil` so 'if err' logic flows perfectly inside callbacks.
-                local res = decoded.result
-                if res == vim.NIL or type(res) == "userdata" then res = nil end
-                local err = decoded.error
-                if err == vim.NIL or type(err) == "userdata" then err = nil end
+                local entry = callbacks[decoded.id]
                 
-                local cb_func = callbacks[decoded.id]
-                callbacks[decoded.id] = nil
-                if cb_func then cb_func(res, err) end
+                if decoded.type == "progress" then
+                  if entry.ctx and entry.ctx.on_index_progress then
+                    entry.ctx.on_index_progress(decoded.msg, decoded.pct)
+                  end
+                else
+                  -- Convert vim.NIL to standard lua `nil`
+                  local res = decoded.result
+                  if res == vim.NIL or type(res) == "userdata" then res = nil end
+                  local err = decoded.error
+                  if err == vim.NIL or type(err) == "userdata" then err = nil end
+                  
+                  callbacks[decoded.id] = nil
+                  if entry.cb then entry.cb(res, err) end
+                end
               end
             end
           end
@@ -152,7 +159,7 @@ function M.request(cmd, args, callback, ctx)
     end
     
     req_id = req_id + 1
-    callbacks[req_id] = callback
+    callbacks[req_id] = { cb = callback, ctx = ctx }
     
     local payload = vim.fn.json_encode({
       id = req_id,

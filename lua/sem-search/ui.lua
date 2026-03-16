@@ -6,6 +6,7 @@ local M = {}
 -- Global UI State allowing users to close the window and re-open smoothly
 M.app_state = "pending" -- pending, prompt_install, installing, indexing, ready, searching, results
 M.progress_msg = ""
+M.progress_pct = nil
 M.pending_resolve = nil
 M.current_results = {}
 M.search_start_time = nil
@@ -225,13 +226,15 @@ function M.search(opts)
        M.pending_resolve = resolve
        setup_prompt_keys()
     end,
-    on_install_progress = function(msg)
+    on_install_progress = function(msg, pct)
        M.app_state = "installing"
        M.progress_msg = msg
+       M.progress_pct = pct
     end,
-    on_index_progress = function(msg)
+    on_index_progress = function(msg, pct)
        M.app_state = "indexing"
        M.progress_msg = msg
+       M.progress_pct = pct
     end,
     on_error = function(msg)
        local_ready_drawn = false
@@ -255,8 +258,16 @@ function M.search(opts)
       vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
 
     elseif M.app_state == "installing" or M.app_state == "indexing" then
-      local bar = get_bouncing_bar(bar_idx, 20)
-      bar_idx = bar_idx + 1
+      local bar
+      if M.progress_pct then
+        local bar_width = 30
+        local filled = math.floor((M.progress_pct / 100) * bar_width)
+        bar = string.rep("█", filled) .. string.rep("░", bar_width - filled) .. string.format(" %d%%", M.progress_pct)
+      else
+        bar = get_bouncing_bar(bar_idx, 20)
+        bar_idx = bar_idx + 1
+      end
+      
       local icon = M.app_state == "installing" and "📦" or "🚀"
       local lines = {
          "", "  " .. icon .. " " .. M.progress_msg, "  [" .. bar .. "]", "",
