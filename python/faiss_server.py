@@ -5,6 +5,7 @@ import os
 import faiss
 import numpy as np
 import ollama
+from concurrent.futures import ThreadPoolExecutor
 
 
 def find_best_line(query, code_text):
@@ -60,47 +61,118 @@ class CodeIndex:
         if not chunks:
             return
 
-        batch_size = 25
-        for i in range(0, len(chunks), batch_size):
-            batch = chunks[i : i + batch_size]
+        batch_size = 50
+        batches = [chunks[i : i + batch_size] for i in range(0, len(chunks), batch_size)]
+
+        def embed_batch(idx):
+            batch = batches[idx]
+            prefix = "search_document: " if "nomic-embed-text" in model else ""
+            inputs = [prefix + str(c['text']) for c in batch]
             try:
+                res = ollama.embed(model=model, input=inputs)
+                return idx, res['embeddings']
+            except Exception as e:
+                return idx, e
+
+        all_results = [None] * len(batches)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(embed_batch, i) for i in range(len(batches))]
+            completed = 0
+            for future in futures:
+                idx, result = future.result()
+                if isinstance(result, Exception):
+                    raise result
+                all_results[idx] = result
+                completed += len(batches[idx])
+
                 if req_id is not None:
-                    pct = int(((i + len(batch)) / len(chunks)) * 100)
+                    pct = int((completed / len(chunks)) * 100)
                     sys.stdout.write(json.dumps({
-                        "id": req_id,
-                        "type": "progress",
-                        "msg": f"Embedding chunks {i+1}-{i+len(batch)} of {len(chunks)}...",
-                        "pct": pct
+                        "id": req_id, "type": "progress", "pct": pct,
+                        "msg": f"Embedding chunks {completed}/{len(chunks)}..."
                     }) + "\n")
                     sys.stdout.flush()
 
-                # Nomic-embed-text requires the correct prompt prefix for retrieval tasks
+        all_embeds = []
+        for r in all_results:
+            all_embeds.extend(r)
+
+        self.chunks.extend(chunks)
+        data = np.array(all_embeds).astype('float32')
+        faiss.normalize_L2(data)
+        self.index.add(data)
+
+    def get_file_stats(self):
+        stats = {}
+        for c in self.chunks:
+            f = c.get('file', '')
+            if f:
+                # Store the max mtime seen for this file (should be consistent across chunks)
+                stats[f] = max(stats.get(f, 0), c.get('mtime', 0))
+        return stats
+
+    def update_delta(self, new_chunks, drop_files, model="nomic-embed-text", req_id=None):
+        drop_set = set(drop_files)
+        kept_indices = [i for i, c in enumerate(self.chunks) if c.get('file', '') not in drop_set]
+
+        kept_chunks = [self.chunks[i] for i in kept_indices]
+        kept_vectors = []
+
+        if len(kept_indices) > 0:
+            for i in kept_indices:
+                vec = self.index.reconstruct(i)
+                kept_vectors.append(vec)
+
+        new_vectors = []
+        if new_chunks:
+            batch_size = 50
+            batches = [new_chunks[i : i + batch_size] for i in range(0, len(new_chunks), batch_size)]
+
+            def embed_new_batch(idx):
+                batch = batches[idx]
                 prefix = "search_document: " if "nomic-embed-text" in model else ""
-
-                # Batch process embeddings
                 inputs = [prefix + str(c['text']) for c in batch]
-                res = ollama.embed(model=model, input=inputs)
+                try:
+                    res = ollama.embed(model=model, input=inputs)
+                    return idx, res['embeddings']
+                except Exception as e:
+                    return idx, e
 
-                # Add embeddings and chunks to index
-                batch_embeds = res['embeddings']
-                for j, emb in enumerate(batch_embeds):
-                    self.chunks.append(batch[j])
-                    # We'll collect all embeddings and add to FAISS at once for efficiency after the loop
-                    # but for now, let's keep it simple and add them to a local list
+            new_results = [None] * len(batches)
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(embed_new_batch, i) for i in range(len(batches))]
+                completed = 0
+                for future in futures:
+                    idx, result = future.result()
+                    if isinstance(result, Exception):
+                        raise result
+                    new_results[idx] = result
+                    completed += len(batches[idx])
 
-                if i == 0:
-                    self.all_embeds = list(batch_embeds)
-                else:
-                    self.all_embeds.extend(batch_embeds)
+                    if req_id is not None:
+                        pct = int((completed / len(new_chunks)) * 100)
+                        sys.stdout.write(json.dumps({
+                            "id": req_id, "type": "progress", "pct": pct,
+                            "msg": f"Embedding new chunks {completed}/{len(new_chunks)}..."
+                        }) + "\n")
+                        sys.stdout.flush()
 
-            except Exception as e:
-                raise Exception(f"Failed embedding batch starting at {i}: {str(e)}")
+            for r in new_results:
+                new_vectors.extend(r)
 
-        if hasattr(self, 'all_embeds') and self.all_embeds:
-            data = np.array(self.all_embeds).astype('float32')
+        # Combine everything
+        final_vectors = kept_vectors + new_vectors
+        final_chunks = kept_chunks + new_chunks
+
+        # Rebuild Index
+        self.index = faiss.IndexFlatIP(768)
+        if final_vectors:
+            data = np.array(final_vectors).astype('float32')
             faiss.normalize_L2(data)
             self.index.add(data)
-            del self.all_embeds            
+
+        self.chunks = final_chunks
+        self.save()
     def clear(self):
         self.chunks = []
         self.index = faiss.IndexFlatIP(768)
@@ -202,6 +274,17 @@ def main():
             elif cmd == "add_chunks":
                 if idx_instance:
                     idx_instance.add_chunks(args.get("chunks", []), args.get("model", "nomic-embed-text"), req_id=req_id)
+                    res["result"] = "ok"
+                else:
+                    res["error"] = "not initialized"
+            elif cmd == "get_file_stats":
+                if idx_instance:
+                    res["result"] = idx_instance.get_file_stats()
+                else:
+                    res["error"] = "not initialized"
+            elif cmd == "update_delta":
+                if idx_instance:
+                    idx_instance.update_delta(args.get("chunks", []), args.get("drop", []), args.get("model", "nomic-embed-text"), req_id=req_id)
                     res["result"] = "ok"
                 else:
                     res["error"] = "not initialized"

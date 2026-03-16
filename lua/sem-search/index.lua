@@ -90,38 +90,80 @@ function M.reindex(callback, ctx)
     return
   end
   
-  if ctx and ctx.on_index_progress then ctx.on_index_progress("Extracting code chunks locally...", 5) end
-  
-  local all_chunks = {}
-  for _, f in ipairs(files) do
-    local chunks = chunker.get_chunks_from_file(f)
-    for _, c in ipairs(chunks) do
-      table.insert(all_chunks, c)
-    end
-  end
-  
-  if ctx and ctx.on_index_progress then ctx.on_index_progress("Generating embeddings (" .. #all_chunks .. " chunks). This may take a minute...", 10) end
-  
-  faiss.request("clear", {}, function(clear_res, clear_err)
-    if clear_err then
+  faiss.request("get_file_stats", {}, function(server_stats, err)
+    if err then
+      -- Fallback to full reindex if stats fail (e.g. older server version)
+      -- But since we control both, let's just log error
       M.is_indexing = false
-      if ctx and ctx.on_error then ctx.on_error("Error clearing old index: " .. clear_err) end
+      if ctx and ctx.on_error then ctx.on_error("Error getting file stats: " .. err) end
       return
     end
     
-    faiss.request("add_chunks", { chunks = all_chunks, model = config.options.embed_model }, function(res, err)
-      if err then 
+    local stats = server_stats or {}
+    local files_to_index = {}
+    local files_to_drop = {}
+    local files_seen_local = {}
+    
+    -- Check for modified or new files
+    for _, f in ipairs(files) do
+      local mtime = vim.fn.getftime(f)
+      files_seen_local[f] = true
+      
+      -- If file not in index OR file mtime is newer than index mtime
+      if not stats[f] or mtime > (stats[f] or 0) then
+        table.insert(files_to_index, f)
+        if stats[f] then
+          table.insert(files_to_drop, f) -- Mark old version for removal
+        end
+      end
+    end
+    
+    -- Check for deleted files (in index but not in local)
+    for f, _ in pairs(stats) do
+      if not files_seen_local[f] then
+        table.insert(files_to_drop, f)
+      end
+    end
+    
+    if #files_to_index == 0 and #files_to_drop == 0 then
+      M.is_indexing = false
+      if ctx and ctx.on_index_progress then ctx.on_index_progress("Index is up to date!", 100) end
+      if callback then vim.schedule(callback) end
+      return
+    end
+
+    if ctx and ctx.on_index_progress then 
+      ctx.on_index_progress("Processing " .. #files_to_index .. " modified files...", 5) 
+    end
+    
+    local new_chunks = {}
+    for i, f in ipairs(files_to_index) do
+      local chunks = chunker.get_chunks_from_file(f)
+      for _, c in ipairs(chunks) do
+        table.insert(new_chunks, c)
+      end
+      if i % 10 == 0 and ctx and ctx.on_index_progress then
+         ctx.on_index_progress("Chunking files " .. i .. "/" .. #files_to_index, 5 + math.floor((i / #files_to_index) * 10))
+      end
+    end
+    
+    if ctx and ctx.on_index_progress then ctx.on_index_progress("Updating index...", 15) end
+    
+    -- Send delta update
+    faiss.request("update_delta", { 
+      chunks = new_chunks, 
+      drop = files_to_drop, 
+      model = config.options.embed_model 
+    }, function(res, delta_err)
+      if delta_err then 
         M.is_indexing = false
-        if ctx and ctx.on_error then ctx.on_error("Error indexing chunks: " .. err) end
+        if ctx and ctx.on_error then ctx.on_error("Error updating index: " .. delta_err) end
         return
       end
       
-      if ctx and ctx.on_index_progress then ctx.on_index_progress("Saving index to disk...") end
-      
-      faiss.request("save", {}, function()
-        M.is_indexing = false
-        if callback then vim.schedule(callback) end
-      end, ctx)
+      M.is_indexing = false
+      if ctx and ctx.on_index_progress then ctx.on_index_progress("Done!", 100) end
+      if callback then vim.schedule(callback) end
     end, ctx)
   end, ctx)
 end

@@ -43,6 +43,7 @@ function M.get_chunks_from_file(filepath)
   local overlap = 15
 
   local i = 1
+  local mtime = vim.fn.getftime(filepath)
   while i <= #lines do
     local end_idx = math.min(i + chunk_size - 1, #lines)
     local snippet_lines = {}
@@ -73,7 +74,8 @@ function M.get_chunks_from_file(filepath)
         line = i,
         text = enhanced_text,
         code_text = text,
-        file = rel_file
+        file = rel_file,
+        mtime = mtime
       })
     end
     
