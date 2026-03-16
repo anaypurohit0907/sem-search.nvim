@@ -35,8 +35,9 @@ Used for the high-performance FAISS vector search bridge. The plugin will automa
 
 ---
 
-## ️Installation (Lazy.nvim)
+## ️ Installation
 
+### [Lazy.nvim](https://github.com/folke/lazy.nvim) (Recommended)
 ```lua
 {
   "anaypurohit0907/sem-search.nvim",
@@ -55,6 +56,28 @@ Used for the high-performance FAISS vector search bridge. The plugin will automa
     })
   end
 }
+```
+
+### [Packer.nvim](https://github.com/wbthomason/packer.nvim)
+```lua
+use {
+  'anaypurohit0907/sem-search.nvim',
+  requires = { 'nvim-lua/plenary.nvim' },
+  config = function()
+    require('sem-search').setup({})
+  end
+}
+```
+
+### [Vim-plug](https://github.com/junegunn/vim-plug)
+```vim
+Plug 'nvim-lua/plenary.nvim'
+Plug 'anaypurohit0907/sem-search.nvim'
+
+" Add this to your init.lua or in a lua block in init.vim
+lua << EOF
+require('sem-search').setup({})
+EOF
 ```
 
 ---

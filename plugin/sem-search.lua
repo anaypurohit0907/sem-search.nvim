@@ -3,4 +3,6 @@ if vim.fn.has("nvim-0.9.0") == 0 then
   return
 end
 
-require('sem-search').setup()
+-- We no longer call setup() automatically here.
+-- Users should call require('sem-search').setup() in their config
+-- to ensure their custom settings are applied correctly.

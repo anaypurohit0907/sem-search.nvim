@@ -3,9 +3,12 @@ local ui = require('sem-search.ui')
 local index = require('sem-search.index')
 
 local M = {}
+local setup_done = false
 
 function M.setup(opts)
   config.setup(opts)
+  if setup_done then return end
+  setup_done = true
 
   -- Setup Commands
   vim.api.nvim_create_user_command('SemStatus', function()
