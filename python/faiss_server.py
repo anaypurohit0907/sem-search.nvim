@@ -5,7 +5,7 @@ import os
 import faiss
 import numpy as np
 import ollama
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def find_best_line(query, code_text):
@@ -75,10 +75,11 @@ class CodeIndex:
                 return idx, e
 
         all_results = [None] * len(batches)
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(embed_batch, i) for i in range(len(batches))]
+        # Using 2 workers is safer for local Ollama instances to avoid hanging
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_to_idx = {executor.submit(embed_batch, i): i for i in range(len(batches))}
             completed = 0
-            for future in futures:
+            for future in as_completed(future_to_idx):
                 idx, result = future.result()
                 if isinstance(result, Exception):
                     raise result
@@ -139,10 +140,10 @@ class CodeIndex:
                     return idx, e
 
             new_results = [None] * len(batches)
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = [executor.submit(embed_new_batch, i) for i in range(len(batches))]
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                future_to_idx = {executor.submit(embed_new_batch, i): i for i in range(len(batches))}
                 completed = 0
-                for future in futures:
+                for future in as_completed(future_to_idx):
                     idx, result = future.result()
                     if isinstance(result, Exception):
                         raise result
@@ -172,8 +173,7 @@ class CodeIndex:
             self.index.add(data)
 
         self.chunks = final_chunks
-        self.save()
-    def clear(self):
+        self.save()    def clear(self):
         self.chunks = []
         self.index = faiss.IndexFlatIP(768)
 
