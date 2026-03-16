@@ -148,6 +148,19 @@ function M.start_server(cb, ctx)
     })
     
     if cb then cb(job_id ~= nil) end
+    
+    -- Ensure server dies with Neovim
+    vim.api.nvim_create_autocmd("VimLeave", {
+      callback = function()
+        if job_id then
+          -- Attempt a graceful JSON 'stop' first
+          pcall(vim.fn.chansend, job_id, vim.fn.json_encode({cmd = "stop"}) .. "\n")
+          -- Force kill after a short delay or immediately
+          pcall(vim.fn.jobstop, job_id)
+          job_id = nil
+        end
+      end
+    })
   end, ctx)
 end
 

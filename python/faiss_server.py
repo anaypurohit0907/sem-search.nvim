@@ -50,10 +50,16 @@ class CodeIndex:
         
         self.chunks = []
         if os.path.exists(self.index_file):
-            self.index = faiss.read_index(self.index_file)
-            if os.path.exists(self.meta_file):
-                with open(self.meta_file, 'r') as f:
-                    self.chunks = json.load(f)
+            try:
+                self.index = faiss.read_index(self.index_file)
+                if os.path.exists(self.meta_file):
+                    with open(self.meta_file, 'r') as f:
+                        self.chunks = json.load(f)
+            except Exception as e:
+                # Log error and start fresh if corrupt
+                sys.stderr.write(f"Warning: Failed to load index, starting fresh: {str(e)}\n")
+                self.index = faiss.IndexFlatIP(768)
+                self.chunks = []
         else:
             self.index = faiss.IndexFlatIP(768)
 
@@ -179,9 +185,24 @@ class CodeIndex:
 
     def save(self):
         os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
-        faiss.write_index(self.index, self.index_file)
-        with open(self.meta_file, 'w') as f:
-            json.dump(self.chunks, f)
+        
+        # Atomic save: write to .tmp then rename
+        tmp_index = self.index_file + ".tmp"
+        tmp_meta = self.meta_file + ".tmp"
+        
+        try:
+            faiss.write_index(self.index, tmp_index)
+            with open(tmp_meta, 'w') as f:
+                json.dump(self.chunks, f)
+            
+            # Atomic rename (on Linux/Unix this is atomic)
+            os.replace(tmp_index, self.index_file)
+            os.replace(tmp_meta, self.meta_file)
+        except Exception as e:
+            # Cleanup tmp files on failure
+            if os.path.exists(tmp_index): os.remove(tmp_index)
+            if os.path.exists(tmp_meta): os.remove(tmp_meta)
+            raise e
 
     def search(self, query, k=10, model="nomic-embed-text", file_filter=None):
         if self.index.ntotal == 0:
@@ -294,6 +315,8 @@ def main():
                     res["result"] = "ok"
                 else:
                     res["error"] = "not initialized"
+            elif cmd == "stop":
+                sys.exit(0)
             elif cmd == "search":
                 if idx_instance:
                     hits = idx_instance.search(args.get("query"), args.get("k", 10), args.get("model", "nomic-embed-text"), args.get("file_filter"))
