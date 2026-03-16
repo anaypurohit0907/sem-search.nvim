@@ -179,7 +179,9 @@ class CodeIndex:
             self.index.add(data)
 
         self.chunks = final_chunks
-        self.save()    def clear(self):
+        self.save()
+
+    def clear(self):
         self.chunks = []
         self.index = faiss.IndexFlatIP(768)
 

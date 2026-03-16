@@ -169,6 +169,7 @@ function M.reindex(callback, ctx)
 end
 
 function M.status(callback)
+  local notify_id = vim.notify("SemSearch: Checking index health...", vim.log.levels.INFO)
   faiss.request("status", {}, function(res, err)
     if err then
       vim.notify("SemSearch Status Error: " .. tostring(err), vim.log.levels.ERROR)
