@@ -67,7 +67,7 @@ class CodeIndex:
         if not chunks:
             return
 
-        batch_size = 50
+        batch_size = 25
         batches = [chunks[i : i + batch_size] for i in range(0, len(chunks), batch_size)]
 
         def embed_batch(idx):
@@ -132,7 +132,7 @@ class CodeIndex:
 
         new_vectors = []
         if new_chunks:
-            batch_size = 50
+            batch_size = 25
             batches = [new_chunks[i : i + batch_size] for i in range(0, len(new_chunks), batch_size)]
 
             def embed_new_batch(idx):

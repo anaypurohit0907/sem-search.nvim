@@ -4,6 +4,7 @@ local faiss = require('sem-search.faiss')
 local config = require('sem-search.config')
 
 local initialized = false
+local initialized_cwd = nil
 M.is_indexing = false
 
 local function get_index_path()
@@ -44,7 +45,8 @@ local function get_all_files()
 end
 
 function M.init(callback, ctx)
-  if initialized then 
+  local current_cwd = vim.fn.getcwd()
+  if initialized and current_cwd == initialized_cwd then 
     if callback then callback() end
     return 
   end
@@ -54,6 +56,7 @@ function M.init(callback, ctx)
   faiss.request("init", { index_path = get_index_path() }, function(res, err)
     if not err and res then
       initialized = true
+      initialized_cwd = current_cwd
       if res.total == 0 and config.options.auto_index then
         vim.schedule(function() 
           M.reindex(callback, ctx)
