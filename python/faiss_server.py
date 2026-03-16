@@ -62,7 +62,10 @@ class CodeIndex:
             try:
                 # Nomic-embed-text requires the correct prompt prefix for retrieval tasks
                 prefix = "search_document: " if "nomic-embed-text" in model else ""
-                emb = ollama.embeddings(model=model, prompt=prefix + c['text'])['embedding']
+                # Use modern ollama.embed() instead of legacy ollama.embeddings()
+                # embed() takes 'input' as a string or list, returns 'embeddings'
+                res = ollama.embed(model=model, input=prefix + str(c['text']))
+                emb = res['embeddings'][0]
                 embeds.append(emb)
                 self.chunks.append(c)
             except Exception as e:
@@ -88,7 +91,8 @@ class CodeIndex:
             return []
         try:
             prefix = "search_query: " if "nomic-embed-text" in model else ""
-            q_emb = np.array([ollama.embeddings(model=model, prompt=prefix + query)['embedding']]).astype('float32')
+            res = ollama.embed(model=model, input=prefix + str(query))
+            q_emb = np.array([res['embeddings'][0]]).astype('float32')
             faiss.normalize_L2(q_emb)
             search_k = min(self.index.ntotal, 10000 if file_filter else k)
             scores, indices = self.index.search(q_emb, search_k)
