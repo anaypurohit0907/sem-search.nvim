@@ -73,6 +73,7 @@ Used for the high-performance FAISS vector search bridge. The plugin will automa
 
 ##  Features
 
+- **Auto-index on save**: Automatically and silently keeps your index up-to-date every time you save a file.
 - **Incremental Indexing**: Only re-indexes files you've changed. Zero wasted CPU.
 - **Parallel Batching**: Squeezes every bit of performance out of your local Ollama instance.
 - **Atomic Saves**: Your index files are protected against corruption, even if Neovim crashes or is closed midway.
