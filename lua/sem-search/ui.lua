@@ -286,7 +286,7 @@ function M.search(opts)
 	local ctx = {
 		on_install_prompt = function(resolve, msg, submsg)
 			M.app_state = "prompt_install"
-			M.prompt_msg = msg or "  📦 Missing Python dependencies detected!"
+			M.prompt_msg = msg or "   Missing Python dependencies detected!"
 			M.prompt_submsg = submsg or "  (faiss-cpu, numpy, ollama)"
 			M.pending_resolve = resolve
 			setup_prompt_keys()
@@ -350,7 +350,7 @@ function M.search(opts)
 					"",
 					"  " .. spinner_frames[frame] .. " " .. tips[tip_idx],
 				}
-				pcall(vim.api.nvim_win_set_config, results_win, { title = " ⏳ Booting up... " })
+				pcall(vim.api.nvim_win_set_config, results_win, { title = "  Booting up... " })
 				vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
 				frame = (frame % #spinner_frames) + 1
 			elseif M.app_state == "searching" and M.search_start_time then
@@ -380,7 +380,7 @@ function M.search(opts)
 					0,
 					-1,
 					false,
-					{ "", "   Ready! Type a query below to semantic search.", "", " | " .. tips[tip_idx] }
+					{ "", " Ready! Type a query below to semantic search." }
 				)
 				if vim.api.nvim_get_current_win() == prompt_win then
 					vim.cmd("startinsert")
