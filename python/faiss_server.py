@@ -317,6 +317,12 @@ def main():
                     res["error"] = "not initialized"
             elif cmd == "stop":
                 sys.exit(0)
+            elif cmd == "status":
+                res["result"] = {
+                    "total_chunks": len(self.chunks),
+                    "index_ntotal": self.index.ntotal,
+                    "healthy": len(self.chunks) == self.index.ntotal
+                }
             elif cmd == "search":
                 if idx_instance:
                     hits = idx_instance.search(args.get("query"), args.get("k", 10), args.get("model", "nomic-embed-text"), args.get("file_filter"))

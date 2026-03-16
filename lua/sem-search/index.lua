@@ -168,6 +168,22 @@ function M.reindex(callback, ctx)
   end, ctx)
 end
 
+function M.status(callback)
+  faiss.request("status", {}, function(res, err)
+    if err then
+      vim.notify("SemSearch Status Error: " .. tostring(err), vim.log.levels.ERROR)
+      if callback then callback(nil) end
+      return
+    end
+    
+    if res then
+      local status_msg = string.format("SemSearch: %d chunks indexed. Status: %s", res.total_chunks, res.healthy and "Healthy" or "Issues detected")
+      vim.notify(status_msg, res.healthy and vim.log.levels.INFO or vim.log.levels.WARN)
+    end
+    if callback then callback(res) end
+  end)
+end
+
 function M.search(query, in_opts, callback, ctx)
   if type(in_opts) == "function" then
     ctx = callback

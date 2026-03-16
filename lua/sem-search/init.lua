@@ -8,6 +8,10 @@ function M.setup(opts)
   config.setup(opts)
 
   -- Setup Commands
+  vim.api.nvim_create_user_command('SemStatus', function()
+    index.status()
+  end, {})
+  
   vim.api.nvim_create_user_command('Semsetup', function()
     index.reindex()
   end, {})
