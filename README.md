@@ -48,7 +48,6 @@ Used for the high-performance FAISS vector search bridge. The plugin will automa
         search = '<leader>ss',           -- Search current file
         workspace_search = '<leader>sw', -- Search entire workspace
         reindex = '<leader>si',          -- Manually trigger reindex
-        setup = '<leader>uS',            -- Open config (TBD)
       },
       -- Optional: override other defaults
       embed_model = 'nomic-embed-text',
