@@ -10,6 +10,86 @@ M.progress_pct = nil
 M.pending_resolve = nil
 M.current_results = {}
 M.search_start_time = nil
+M.ignore_enabled = config.options.ignore_enabled
+if M.ignore_enabled == nil then
+	M.ignore_enabled = true
+end
+M.pattern_states = {} -- pattern string -> boolean
+
+local function get_active_patterns()
+	local active = {}
+	for _, p in ipairs(config.options.ignore_patterns or {}) do
+		if M.pattern_states[p] ~= false then
+			table.insert(active, p)
+		end
+	end
+	return active
+end
+
+function M.show_filter_menu()
+	local patterns = config.options.ignore_patterns or {}
+	if #patterns == 0 then
+		vim.notify("SemSearch: No ignore patterns configured.", vim.log.levels.WARN)
+		return
+	end
+
+	local width = 50
+	local height = #patterns + 2
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
+
+	local buf = vim.api.nvim_create_buf(false, true)
+	local win = vim.api.nvim_open_win(buf, true, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded",
+		title = " SemSearch: Manage Filters ",
+		title_pos = "center",
+		footer = " <CR> Toggle  q/Esc Close ",
+		footer_pos = "center",
+	})
+
+	local function redraw()
+		local lines = {}
+		for _, p in ipairs(patterns) do
+			local status = M.pattern_states[p] ~= false and "[x]" or "[ ]"
+			table.insert(lines, string.format("  %s %s", status, p))
+		end
+		table.insert(lines, "")
+		table.insert(lines, "  Global Filter: " .. (M.ignore_enabled and "ENABLED" or "DISABLED"))
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	end
+
+	redraw()
+
+	local function toggle()
+		local cursor = vim.api.nvim_win_get_cursor(win)
+		local idx = cursor[1]
+		if idx <= #patterns then
+			local p = patterns[idx]
+			M.pattern_states[p] = not (M.pattern_states[p] ~= false)
+			redraw()
+			if M.last_query and M.trigger_search then
+				M.trigger_search(M.last_query)
+			end
+		elseif idx == #patterns + 2 then
+			M.toggle_ignore()
+			redraw()
+		end
+	end
+
+	vim.keymap.set("n", "<CR>", toggle, { buffer = buf, noremap = true, silent = true })
+	vim.keymap.set("n", "q", function()
+		vim.api.nvim_win_close(win, true)
+	end, { buffer = buf, noremap = true, silent = true })
+	vim.keymap.set("n", "<Esc>", function()
+		vim.api.nvim_win_close(win, true)
+	end, { buffer = buf, noremap = true, silent = true })
+end
 
 local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 local tips = {
@@ -62,6 +142,14 @@ function M.exit_cycle_mode()
 	pcall(vim.keymap.del, "n", "<C-p>")
 	pcall(vim.keymap.del, "n", "<C-c>")
 	vim.notify("SemSearch Cycle Mode Exit", vim.log.levels.INFO)
+end
+
+function M.toggle_ignore()
+	M.ignore_enabled = not M.ignore_enabled
+	vim.notify("SemSearch Filters: " .. (M.ignore_enabled and "ON" or "OFF"), vim.log.levels.INFO)
+	if M.last_query and M.trigger_search then
+		M.trigger_search(M.last_query)
+	end
 end
 
 function M.setup_cycle_keybinds()
@@ -175,7 +263,7 @@ function M.search(opts)
 		border = "rounded",
 		title = results_title,
 		title_pos = "center",
-		footer = " <CR> Jump  yy Copy Path  q/Esc Close ",
+		footer = " <CR> Jump  <C-i> Toggle Filter  q/Esc Close ",
 		footer_pos = "center",
 	})
 
@@ -224,6 +312,13 @@ function M.search(opts)
 			vim.api.nvim_set_current_win(prompt_win)
 			vim.cmd("startinsert")
 		end
+	end, { buffer = results_buf, noremap = true, silent = true })
+
+	vim.keymap.set({ "i", "n" }, "<C-i>", function()
+		M.toggle_ignore()
+	end, { buffer = prompt_buf, noremap = true, silent = true })
+	vim.keymap.set("n", "<C-i>", function()
+		M.toggle_ignore()
 	end, { buffer = results_buf, noremap = true, silent = true })
 
 	-- Setup keymaps for prompt if we are currently prompting
@@ -309,6 +404,9 @@ function M.search(opts)
 		end,
 	}
 
+	M.last_file_filter = file_filter
+	M.last_ctx = ctx
+
 	timer = vim.loop.new_timer()
 	timer:start(
 		0,
@@ -334,15 +432,15 @@ function M.search(opts)
 				if M.progress_pct then
 					local bar_width = 30
 					local filled = math.floor((M.progress_pct / 100) * bar_width)
-					bar = string.rep("█", filled)
-						.. string.rep("░", bar_width - filled)
+					bar = string.rep("#", filled)
+						.. string.rep("-", bar_width - filled)
 						.. string.format(" %d%%", M.progress_pct)
 				else
 					bar = get_bouncing_bar(bar_idx, 20)
 					bar_idx = bar_idx + 1
 				end
 
-				local icon = M.app_state == "installing" and "📦" or "🚀"
+				local icon = M.app_state == "installing" and "INSTALL" or "INDEX"
 				local lines = {
 					"",
 					"  " .. icon .. " " .. M.progress_msg,
@@ -485,7 +583,7 @@ function M.search(opts)
 		local_results_drawn = false
 	end
 
-	vim.fn.prompt_setcallback(prompt_buf, function(query)
+	local function do_search(query)
 		if not query or query == "" then
 			vim.cmd("startinsert")
 			return
@@ -495,11 +593,16 @@ function M.search(opts)
 			return
 		end
 
+		M.last_query = query
 		M.app_state = "searching"
 		M.search_start_time = vim.loop.hrtime()
 		local_ready_drawn = false -- wipe state
+		local_results_drawn = false -- allow redraw
 
-		index.search(query, { file_filter = file_filter }, function(results, err)
+		index.search(query, {
+			file_filter = file_filter,
+			ignore_patterns = M.ignore_enabled and get_active_patterns() or nil,
+		}, function(results, err)
 			vim.schedule(function()
 				if err then
 					M.error_msg = err
@@ -518,7 +621,10 @@ function M.search(opts)
 				end
 			end)
 		end, ctx)
-	end)
+	end
+	M.trigger_search = do_search
+
+	vim.fn.prompt_setcallback(prompt_buf, do_search)
 end
 
 return M

@@ -1,4 +1,4 @@
-#  sem-search.nvim
+# sem-search.nvim
 
 The most intuitive, beautiful, and **100% local** semantic search for Neovim. 
 
@@ -6,7 +6,7 @@ Stop grepping for exact strings. Start searching for **intent**. `sem-search.nvi
 
 ---
 
-##  Quick Start
+## Quick Start
 
 1. **Install Dependencies** (See below)
 2. **Open a Project** in Neovim.
@@ -18,7 +18,7 @@ Stop grepping for exact strings. Start searching for **intent**. `sem-search.nvi
 
 ---
 
-##  External Dependencies
+## External Dependencies
 
 This plugin is designed to be private and local. It requires the following tools installed on your system:
 
@@ -35,7 +35,7 @@ Used for the high-performance FAISS vector search bridge. The plugin will automa
 
 ---
 
-## ️ Installation
+## Installation
 
 ### [Lazy.nvim](https://github.com/folke/lazy.nvim) (Recommended)
 ```lua
@@ -48,11 +48,15 @@ Used for the high-performance FAISS vector search bridge. The plugin will automa
       keymap = {
         search = '<leader>ss',           -- Search current file
         workspace_search = '<leader>sw', -- Search entire workspace
+        setup = '<leader>uS',            -- Manage filter patterns
         reindex = '<leader>si',          -- Manually trigger reindex
       },
       -- Optional: override other defaults
       embed_model = 'nomic-embed-text',
       max_results = 10,
+      -- Custom folders to ignore by default
+      ignore_patterns = { "\\.git/", "node_modules/", "vendor/", "docs/" },
+      ignore_enabled = true,
     })
   end
 }
@@ -82,20 +86,31 @@ EOF
 
 ---
 
-## ️ Default Keymaps
+## Default Keymaps
 
 | Keymap | Action | Description |
 | :--- | :--- | :--- |
 | `<leader>ss` | **Search File** | Semantic search within the current buffer only. |
 | `<leader>sw` | **Workspace** | Search the entire project. |
+| `<leader>uS` | **Filters** | Manage and toggle your ignore patterns. |
 | `<leader>si` | **Reindex** | Manually trigger an incremental update. |
 | `:SemStatus` | **Health** | Check if your index is healthy and see chunk counts. |
 | `:Semsetup`  | **Init** | Perform the first-time full workspace index. |
 
+### Search Interface Keys
+
+| Key | Action |
+| :--- | :--- |
+| `<C-i>` | **Toggle Filters** | Quickly turn all active ignore patterns ON/OFF. |
+| `<CR>` | **Jump** | Go to the selected search result. |
+| `q / Esc` | **Close** | Exit the search interface. |
+
 ---
 
-##  Features
+## Features
 
+- **Smart Filtering**: Configure `ignore_patterns` (like `node_modules/` or `docs/`) to keep your search results clean.
+- **Filter Management Menu**: Press `<leader>uS` to open a menu where you can pick and choose which specific folders to ignore in real-time.
 - **Auto-index on save**: Automatically and silently keeps your index up-to-date every time you save a file.
 - **Incremental Indexing**: Only re-indexes files you've changed. Zero wasted CPU.
 - **Parallel Batching**: Squeezes every bit of performance out of your local Ollama instance.
@@ -105,7 +120,7 @@ EOF
 
 ---
 
-##  Troubleshooting
+## Troubleshooting
 
 - **Search is "Infinite Loading"**: Ollama might be busy downloading a model or processing a large batch from another instance. Check `ollama ps` in your terminal.
 - **No results**: Ensure you have run `:Semsetup` at least once in the project.

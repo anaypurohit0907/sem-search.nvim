@@ -7,6 +7,8 @@ M.defaults = {
   max_results = 10,
   chunk_size = 10000,
   auto_index = true,
+  ignore_patterns = { "\\.git/", "node_modules/", "vendor/", "\\.venv/", "dist/", "build/", "docs/" },
+  ignore_enabled = true,
   colors = { score = 'DiagnosticHint', path = 'String', func = 'Function' },
 }
 

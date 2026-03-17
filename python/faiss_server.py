@@ -206,7 +206,7 @@ class CodeIndex:
             if os.path.exists(tmp_meta): os.remove(tmp_meta)
             raise e
 
-    def search(self, query, k=10, model="nomic-embed-text", file_filter=None):
+    def search(self, query, k=10, model="nomic-embed-text", file_filter=None, ignore_patterns=None):
         if self.index.ntotal == 0:
             return []
         try:
@@ -214,11 +214,11 @@ class CodeIndex:
             res = ollama.embed(model=model, input=prefix + str(query))
             q_emb = np.array([res['embeddings'][0]]).astype('float32')
             faiss.normalize_L2(q_emb)
-            search_k = min(self.index.ntotal, 10000 if file_filter else k)
+            search_k = min(self.index.ntotal, 10000 if (file_filter or ignore_patterns) else k)
             scores, indices = self.index.search(q_emb, search_k)
             
             results = []
-            best_score = float(scores[0][0])
+            best_score = float(scores[0][0]) if len(scores[0]) > 0 else 0
             for i, idx in enumerate(indices[0]):
                 if len(results) >= k:
                     break
@@ -235,9 +235,19 @@ class CodeIndex:
                     
                 if 0 <= idx < len(self.chunks) and idx >= 0:
                     chunk = self.chunks[idx]
-                    if file_filter and chunk.get('file', '') != file_filter:
+                    file_path = chunk.get('file', '')
+                    if file_filter and file_path != file_filter:
                         continue
                     
+                    if ignore_patterns:
+                        should_ignore = False
+                        for p in ignore_patterns:
+                            if re.search(p, file_path):
+                                should_ignore = True
+                                break
+                        if should_ignore:
+                            continue
+
                     # Normalize the nomic score (0.4 to 0.8) slightly upwards for nicer UI percentages
                     # A raw 0.74 cosine similarity is actually an extremely good match for Nomic.
                     ui_score = min(100.0, max(0.0, ((score_val - 0.3) / 0.5) * 100))
@@ -327,7 +337,7 @@ def main():
                 }
             elif cmd == "search":
                 if idx_instance:
-                    hits = idx_instance.search(args.get("query"), args.get("k", 10), args.get("model", "nomic-embed-text"), args.get("file_filter"))
+                    hits = idx_instance.search(args.get("query"), args.get("k", 10), args.get("model", "nomic-embed-text"), args.get("file_filter"), args.get("ignore_patterns"))
                     res["result"] = hits
                 else:
                     res["error"] = "not initialized"

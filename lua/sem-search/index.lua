@@ -212,7 +212,8 @@ function M.search(query, in_opts, callback, ctx)
     query = query,
     k = config.options.max_results,
     model = config.options.embed_model,
-    file_filter = in_opts.file_filter
+    file_filter = in_opts.file_filter,
+    ignore_patterns = in_opts.ignore_patterns
   }
   faiss.request("search", req_args, callback, ctx)
 end
