@@ -308,7 +308,17 @@ function M.search(opts)
 	vim.keymap.set("n", "q", close_ui, { buffer = results_buf, noremap = true, silent = true })
 	vim.keymap.set("n", "<Esc>", close_ui, { buffer = results_buf, noremap = true, silent = true })
 	vim.keymap.set("n", "<CR>", function()
-		jump_to_result(nil)
+		local cursor = vim.api.nvim_win_get_cursor(results_win)
+		local res_idx = cursor[1]
+		if res_idx < 1 or res_idx > #M.current_results then return end
+		local res = M.current_results[res_idx]
+		if not res or not res.file then return end
+		close_ui()
+		vim.cmd("edit " .. res.file)
+		pcall(vim.api.nvim_win_set_cursor, 0, { res.line, 1 })
+		vim.cmd("normal! zz")
+		M.active_res_idx = res_idx
+		M.setup_cycle_keybinds()
 	end, { buffer = results_buf, noremap = true, silent = true })
 	vim.keymap.set("n", "<C-n>", function()
 		if vim.api.nvim_win_is_valid(prompt_win) then

@@ -15,10 +15,10 @@ function M.setup(opts)
   vim.api.nvim_create_user_command('SemStatus', function()
     index.status()
   end, {})
-  
+
   vim.api.nvim_create_user_command('Semsetup', function()
-    index.auto_indexing = false
     index.is_indexing = false
+    index.auto_indexing = false
     index.reindex()
   end, {})
 
@@ -27,7 +27,11 @@ function M.setup(opts)
   vim.keymap.set('n', k.search, function() ui.search({ workspace = false }) end, { desc = "Semantic Search (Current File)" })
   vim.keymap.set('n', k.workspace_search, function() ui.search({ workspace = true }) end, { desc = "Semantic Search (Workspace)" })
   vim.keymap.set('n', k.setup, function() ui.show_filter_menu() end, { desc = "SemSearch Config" })
-  vim.keymap.set('n', k.reindex, function() index.reindex() end, { desc = "SemSearch Reindex" })
+  vim.keymap.set('n', k.reindex, function()
+    index.is_indexing = false
+    index.auto_indexing = false
+    index.reindex()
+  end, { desc = "SemSearch Reindex" })
 
   vim.defer_fn(function()
     faiss.warmup(function(ok)
@@ -45,10 +49,10 @@ function M.setup(opts)
       callback = function()
         if index.is_indexing then return end
         index.auto_indexing = true
-        index.reindex(nil, { 
+        index.reindex(nil, {
           auto_index = true,
           on_index_progress = function() end,
-          on_error = function(err) 
+          on_error = function(err)
             if not err:match("not initialized") then
               vim.notify("SemSearch Auto-index error: " .. err, vim.log.levels.DEBUG)
             end

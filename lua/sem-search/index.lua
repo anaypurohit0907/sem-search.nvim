@@ -46,14 +46,14 @@ end
 
 function M.init(callback, ctx)
   local current_cwd = vim.fn.getcwd()
-  if initialized and current_cwd == initialized_cwd then 
+  if initialized and current_cwd == initialized_cwd then
     if callback then callback() end
-    return 
+    return
   end
-  
+
   if M.is_indexing and not M.auto_indexing then return end
-  
-  faiss.request("init", { 
+
+  faiss.request("init", {
       index_path = get_index_path(),
       batch_size = config.options.batch_size,
       max_workers = config.options.max_workers
@@ -62,24 +62,26 @@ function M.init(callback, ctx)
       initialized = true
       initialized_cwd = current_cwd
       if res.total == 0 and config.options.auto_index then
-        vim.schedule(function() 
-          M.reindex(callback, ctx)
+        vim.schedule(function()
+          index.is_indexing = true
+          index.auto_indexing = false
+          index.reindex(callback)
         end)
       else
         if callback then vim.schedule(callback) end
       end
     else
-      if ctx and ctx.on_error then 
+      if ctx and ctx.on_error then
           local e_str = tostring(err or "unknown input")
           if err == vim.NIL or type(err) == "userdata" then
             e_str = "unknown userdata error"
           end
-          ctx.on_error("Failed to init semantic search: " .. e_str) 
+          ctx.on_error("Failed to init semantic search: " .. e_str)
       else
           vim.notify("Failed to init semantic search", vim.log.levels.ERROR)
       end
     end
-  end, ctx)
+  end)
 end
 
 function M.reindex(callback, ctx)
