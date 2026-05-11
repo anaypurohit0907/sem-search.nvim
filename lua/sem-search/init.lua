@@ -17,8 +17,6 @@ function M.setup(opts)
   end, {})
 
   vim.api.nvim_create_user_command('Semsetup', function()
-    index.is_indexing = false
-    index.auto_indexing = false
     index.reindex()
   end, {})
 
@@ -28,8 +26,6 @@ function M.setup(opts)
   vim.keymap.set('n', k.workspace_search, function() ui.search({ workspace = true }) end, { desc = "Semantic Search (Workspace)" })
   vim.keymap.set('n', k.setup, function() ui.show_filter_menu() end, { desc = "SemSearch Config" })
   vim.keymap.set('n', k.reindex, function()
-    index.is_indexing = false
-    index.auto_indexing = false
     index.reindex()
   end, { desc = "SemSearch Reindex" })
 

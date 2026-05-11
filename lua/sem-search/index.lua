@@ -51,12 +51,13 @@ function M.init(callback, ctx)
     return
   end
 
-  if M.is_indexing and not M.auto_indexing then
-    if callback then callback(nil, "Index currently building. Please wait a moment...") end
-    return
-  end
+  local function do_init()
+    if M.is_indexing and not M.auto_indexing then
+      vim.defer_fn(function() do_init() end, 500)
+      return
+    end
 
-  faiss.request("init", {
+    faiss.request("init", {
       index_path = get_index_path(),
       batch_size = config.options.batch_size,
       max_workers = config.options.max_workers
@@ -83,6 +84,9 @@ function M.init(callback, ctx)
       end
     end
   end, ctx)
+  end
+
+  do_init()
 end
 
 function M.reindex(callback, ctx)
@@ -209,11 +213,6 @@ function M.search(query, in_opts, callback, ctx)
     M.init(function()
       M.search(query, in_opts, callback, ctx)
     end, ctx)
-    return
-  end
-
-  if M.is_indexing and not M.auto_indexing then
-    if callback then callback(nil, "Index currently building. Please wait a moment...") end
     return
   end
 
