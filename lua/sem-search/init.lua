@@ -26,6 +26,14 @@ function M.setup(opts)
   vim.keymap.set('n', k.setup, function() ui.show_filter_menu() end, { desc = "SemSearch Config" })
   vim.keymap.set('n', k.reindex, function() index.reindex() end, { desc = "SemSearch Reindex" })
 
+  vim.defer_fn(function()
+    faiss.warmup(function(ok)
+      if ok then
+        vim.debug.log("SemSearch: Ollama connection warmed up")
+      end
+    end)
+  end, 1000)
+
   -- Auto-index on save
   if config.options.auto_index then
     vim.api.nvim_create_autocmd("BufWritePost", {

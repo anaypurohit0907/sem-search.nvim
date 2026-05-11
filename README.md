@@ -44,19 +44,48 @@ Used for the high-performance FAISS vector search bridge. The plugin will automa
   dependencies = { "nvim-lua/plenary.nvim" },
   config = function()
     require('sem-search').setup({
-      -- Custom Keymaps (defaults shown below)
+      -- === Keymaps ===
       keymap = {
-        search = '<leader>ss',           -- Search current file
-        workspace_search = '<leader>sw', -- Search entire workspace
-        setup = '<leader>uS',            -- Manage filter patterns
-        reindex = '<leader>si',          -- Manually trigger reindex
+        search = '<leader>ss',           -- Semantic search in current buffer
+        workspace_search = '<leader>sw', -- Search entire project
+        setup = '<leader>uS',            -- Manage ignore patterns
+        reindex = '<leader>si',          -- Trigger incremental reindex
       },
-      -- Optional: override other defaults
-      embed_model = 'nomic-embed-text',
-      max_results = 10,
-      -- Custom folders to ignore by default
-      ignore_patterns = { "\\.git/", "node_modules/", "vendor/", "docs/" },
-      ignore_enabled = true,
+
+      -- === Ollama ===
+      ollama_host = 'localhost:11434',     -- Ollama server address
+      embed_model = 'nomic-embed-text',   -- Embedding model (nomic-embed-text recommended)
+
+      -- === Search ===
+      max_results = 10,                    -- Max results to return per search
+      include_global_in_search = false,    -- Include cross-project results (GlobalKB)
+
+      -- === Indexing ===
+      chunk_size_lines = 50,              -- Lines per chunk (smaller = more granular)
+      chunk_overlap_lines = 15,           -- Overlap between chunks (helps find boundary code)
+      auto_index = true,                   -- Auto-reindex changed files on save
+      batch_size = 100,                    -- Chunks per embedding batch (env: SEMSEARCH_BATCH_SIZE)
+      max_workers = 8,                     -- Parallel embedding workers (env: SEMSEARCH_MAX_WORKERS, 0=auto)
+      global_kb_auto_save = true,         -- Auto-save GlobalKB after adding chunks
+
+      -- === Filtering ===
+      ignore_enabled = true,              -- Enable/disable all ignore patterns
+      ignore_patterns = {                 -- Glob-style patterns to skip during indexing
+        "\\.git/",
+        "node_modules/",
+        "vendor/",
+        "\\.venv/",
+        "dist/",
+        "build/",
+        "docs/",
+      },
+
+      -- === UI ===
+      colors = {
+        score = 'DiagnosticHint',         -- Score highlight group
+        path = 'String',                  -- File path highlight group
+        func = 'Function',                -- Function/class name highlight group
+      },
     })
   end
 }

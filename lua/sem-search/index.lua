@@ -53,7 +53,11 @@ function M.init(callback, ctx)
   
   if M.is_indexing then return end
   
-  faiss.request("init", { index_path = get_index_path() }, function(res, err)
+  faiss.request("init", { 
+      index_path = get_index_path(),
+      batch_size = config.options.batch_size,
+      max_workers = config.options.max_workers
+    }, function(res, err)
     if not err and res then
       initialized = true
       initialized_cwd = current_cwd
@@ -141,8 +145,9 @@ function M.reindex(callback, ctx)
     
     local new_chunks = {}
     for i, f in ipairs(files_to_index) do
-      local chunks = chunker.get_chunks_from_file(f)
-      for _, c in ipairs(chunks) do
+      local raw_chunks = chunker.get_chunks_from_file(f)
+      for _, c in ipairs(raw_chunks) do
+        c.text = chunker.get_text(c)
         table.insert(new_chunks, c)
       end
       if i % 10 == 0 and ctx and ctx.on_index_progress then
@@ -156,7 +161,9 @@ function M.reindex(callback, ctx)
     faiss.request("update_delta", { 
       chunks = new_chunks, 
       drop = files_to_drop, 
-      model = config.options.embed_model 
+      model = config.options.embed_model,
+      batch_size = config.options.batch_size,
+      max_workers = config.options.max_workers
     }, function(res, delta_err)
       if delta_err then 
         M.is_indexing = false

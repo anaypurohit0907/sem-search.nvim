@@ -149,10 +149,8 @@ function M.start_server(cb, ctx)
 				for i, chunk in ipairs(data) do
 					stdout_buf = stdout_buf .. chunk
 					if i < #data then
-						-- When we are not at the final fragment of the `data` array,
-						-- Neovim implies there was a newline after this chunk.
 						local line = stdout_buf
-						stdout_buf = "" -- Reset buffer for the next line
+						stdout_buf = ""
 
 						if line ~= "" then
 							local ok_json, decoded = pcall(vim.fn.json_decode, line)
@@ -164,7 +162,6 @@ function M.start_server(cb, ctx)
 										entry.ctx.on_index_progress(decoded.msg, decoded.pct)
 									end
 								else
-									-- Convert vim.NIL to standard lua `nil`
 									local res = decoded.result
 									if res == vim.NIL or type(res) == "userdata" then
 										res = nil
@@ -194,13 +191,10 @@ function M.start_server(cb, ctx)
 			cb(job_id ~= nil)
 		end
 
-		-- Ensure server dies with Neovim
 		vim.api.nvim_create_autocmd("VimLeave", {
 			callback = function()
 				if job_id then
-					-- Attempt a graceful JSON 'stop' first
 					pcall(vim.fn.chansend, job_id, vim.fn.json_encode({ cmd = "stop" }) .. "\n")
-					-- Force kill after a short delay or immediately
 					pcall(vim.fn.jobstop, job_id)
 					job_id = nil
 				end
@@ -229,6 +223,24 @@ function M.request(cmd, args, callback, ctx)
 
 		vim.fn.chansend(job_id, payload .. "\n")
 	end, ctx)
+end
+
+M.cross_search = function(query, k, callback, ctx)
+	M.request("cross_search", {
+		query = query,
+		k = k or config.options.max_results,
+		model = config.options.embed_model
+	}, callback, ctx)
+end
+
+M.warmup = function(callback)
+	M.request("warmup", { model = config.options.embed_model }, function(res, err)
+		if callback then callback(not err) end
+	end)
+end
+
+M.global_stats = function(callback)
+	M.request("global_stats", {}, callback)
 end
 
 return M
