@@ -1,4 +1,5 @@
 local config = require('sem-search.config')
+local faiss = require('sem-search.faiss')
 local ui = require('sem-search.ui')
 local index = require('sem-search.index')
 
