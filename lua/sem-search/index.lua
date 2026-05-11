@@ -6,6 +6,7 @@ local config = require('sem-search.config')
 local initialized = false
 local initialized_cwd = nil
 M.is_indexing = false
+M.auto_indexing = false
 
 local function get_index_path()
   local cwd = vim.fn.getcwd()
@@ -24,12 +25,11 @@ local function get_all_files()
   else
     files = vim.fn.systemlist("find . -type f -not -path '*/\\.git/*'")
   end
-  
+
   if #files == 0 then
-    -- Absolute fallback
     files = vim.fn.systemlist("find . -type f -not -path '*/\\.git/*'")
   end
-  
+
   local clean_files = {}
   local cwd = vim.fn.getcwd()
   for _, f in ipairs(files) do
@@ -51,7 +51,10 @@ function M.init(callback, ctx)
     return
   end
 
-  if M.is_indexing and not M.auto_indexing then return end
+  if M.is_indexing and not M.auto_indexing then
+    if callback then callback(nil, "Index currently building. Please wait a moment...") end
+    return
+  end
 
   faiss.request("init", {
       index_path = get_index_path(),
@@ -63,9 +66,7 @@ function M.init(callback, ctx)
       initialized_cwd = current_cwd
       if res.total == 0 and config.options.auto_index then
         vim.schedule(function()
-          index.is_indexing = true
-          index.auto_indexing = false
-          index.reindex(callback)
+          M.reindex(callback, ctx)
         end)
       else
         if callback then vim.schedule(callback) end
@@ -81,19 +82,16 @@ function M.init(callback, ctx)
           vim.notify("Failed to init semantic search", vim.log.levels.ERROR)
       end
     end
-  end)
+  end, ctx)
 end
 
 function M.reindex(callback, ctx)
   if M.is_indexing and not M.auto_indexing then return end
-  
+
   M.is_indexing = true
   M.auto_indexing = ctx and ctx.auto_index or false
   M.indexing_start_time = nil
-  if ctx then
-    if ctx.on_index_progress then ctx.on_index_progress("Discovering files...", 0, nil, nil) end
-  end
-  
+
   local files = get_all_files()
   if #files == 0 then
     if ctx and ctx.on_error then ctx.on_error("SemSearch: No files discovered.") end
@@ -102,7 +100,7 @@ function M.reindex(callback, ctx)
     if ctx and ctx.on_done then ctx.on_done() end
     return
   end
-  
+
   faiss.request("get_file_stats", {}, function(server_stats, err)
     if err then
       M.is_indexing = false
@@ -111,77 +109,70 @@ function M.reindex(callback, ctx)
       if ctx and ctx.on_error then ctx.on_error("Error getting file stats: " .. err) end
       return
     end
-    
+
     local stats = server_stats or {}
     local files_to_index = {}
     local files_to_drop = {}
     local files_seen_local = {}
-    
-    -- Check for modified or new files
+
     for _, f in ipairs(files) do
       local mtime = vim.fn.getftime(f)
       files_seen_local[f] = true
-      
-      -- If file not in index OR file mtime is newer than index mtime
       if not stats[f] or mtime > (stats[f] or 0) then
         table.insert(files_to_index, f)
         if stats[f] then
-          table.insert(files_to_drop, f) -- Mark old version for removal
+          table.insert(files_to_drop, f)
         end
       end
     end
-    
-    -- Check for deleted files (in index but not in local)
+
     for f, _ in pairs(stats) do
       if not files_seen_local[f] then
         table.insert(files_to_drop, f)
       end
     end
-    
-    if #files_to_index == 0 and #files_to_drop == 0 then
+
+    if ctx and ctx.on_index_progress then
+      ctx.on_index_progress("Indexing " .. #files_to_index .. " files...", 5, nil, nil)
+    end
+
+    local new_chunks = {}
+    for _, f in ipairs(files_to_index) do
+      local raw_chunks = chunker.get_chunks_from_file(f)
+      for _, c in ipairs(raw_chunks) do
+        c.text = chunker.get_text(c)
+        table.insert(new_chunks, c)
+      end
+    end
+
+    if #new_chunks == 0 and #files_to_drop == 0 then
       M.is_indexing = false
       M.auto_indexing = false
-      M.indexing_start_time = nil
       if ctx and ctx.on_done then ctx.on_done() end
       if ctx and ctx.on_index_progress then ctx.on_index_progress("Index is up to date!", 100, nil, nil) end
       if callback then vim.schedule(callback) end
       return
     end
 
-    if ctx and ctx.on_index_progress then 
-      ctx.on_index_progress("Processing " .. #files_to_index .. " modified files...", 5, #new_chunks, 0) 
+    if ctx and ctx.on_index_progress then
+      ctx.on_index_progress("Embedding " .. #new_chunks .. " chunks...", 15, #new_chunks, 0)
     end
-    
-    local new_chunks = {}
-    for i, f in ipairs(files_to_index) do
-      local raw_chunks = chunker.get_chunks_from_file(f)
-      for _, c in ipairs(raw_chunks) do
-        c.text = chunker.get_text(c)
-        table.insert(new_chunks, c)
-      end
-if i % 10 == 0 and ctx and ctx.on_index_progress then
-         ctx.on_index_progress("Chunking files " .. i .. "/" .. #files_to_index, 5 + math.floor((i / #files_to_index) * 10), #new_chunks, i * 3)
-       end
-    end
-    
-    if ctx and ctx.on_index_progress then ctx.on_index_progress("Embedding chunks...", 15, #new_chunks, 0) end
-    
-    -- Send delta update
-    faiss.request("update_delta", { 
-      chunks = new_chunks, 
-      drop = files_to_drop, 
+
+    faiss.request("update_delta", {
+      chunks = new_chunks,
+      drop = files_to_drop,
       model = config.options.embed_model,
       batch_size = config.options.batch_size,
       max_workers = config.options.max_workers
-}, function(res, delta_err)
-      if delta_err then 
+    }, function(res, delta_err)
+      if delta_err then
         M.is_indexing = false
         M.auto_indexing = false
         if ctx and ctx.on_done then ctx.on_done() end
         if ctx and ctx.on_error then ctx.on_error("Error updating index: " .. delta_err) end
         return
       end
-      
+
       M.is_indexing = false
       M.auto_indexing = false
       if ctx and ctx.on_done then ctx.on_done() end
@@ -192,14 +183,12 @@ if i % 10 == 0 and ctx and ctx.on_index_progress then
 end
 
 function M.status(callback)
-  local notify_id = vim.notify("SemSearch: Checking index health...", vim.log.levels.INFO)
   faiss.request("status", {}, function(res, err)
     if err then
       vim.notify("SemSearch Status Error: " .. tostring(err), vim.log.levels.ERROR)
       if callback then callback(nil) end
       return
     end
-    
     if res then
       local status_msg = string.format("SemSearch: %d chunks indexed. Status: %s", res.total_chunks, res.healthy and "Healthy" or "Issues detected")
       vim.notify(status_msg, res.healthy and vim.log.levels.INFO or vim.log.levels.WARN)
@@ -222,12 +211,12 @@ function M.search(query, in_opts, callback, ctx)
     end, ctx)
     return
   end
-  
+
   if M.is_indexing and not M.auto_indexing then
     if callback then callback(nil, "Index currently building. Please wait a moment...") end
     return
   end
-  
+
   local req_args = {
     query = query,
     k = config.options.max_results,
