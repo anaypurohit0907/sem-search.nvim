@@ -32,7 +32,7 @@ function M.setup(opts)
   vim.defer_fn(function()
     faiss.warmup(function(ok)
       if ok then
-        vim.debug.log("SemSearch: Ollama connection warmed up")
+        vim.notify("SemSearch: Ollama connection warmed up", vim.log.levels.DEBUG)
       end
     end)
   end, 1000)
