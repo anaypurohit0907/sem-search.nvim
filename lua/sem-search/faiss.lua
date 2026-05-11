@@ -158,8 +158,17 @@ function M.start_server(cb, ctx)
 								local entry = callbacks[decoded.id]
 
 								if decoded.type == "progress" then
+									local chunks_done = nil
+									local chunks_total = nil
+									if decoded.msg then
+										local c_done, c_total = decoded.msg:match("(%d+)/(%d+)")
+										if c_done and c_total then
+											chunks_done = tonumber(c_done)
+											chunks_total = tonumber(c_total)
+										end
+									end
 									if entry.ctx and entry.ctx.on_index_progress then
-										entry.ctx.on_index_progress(decoded.msg, decoded.pct)
+										entry.ctx.on_index_progress(decoded.msg, decoded.pct, chunks_total, chunks_done)
 									end
 								else
 									local res = decoded.result

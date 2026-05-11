@@ -17,6 +17,8 @@ function M.setup(opts)
   end, {})
   
   vim.api.nvim_create_user_command('Semsetup', function()
+    index.auto_indexing = false
+    index.is_indexing = false
     index.reindex()
   end, {})
 
@@ -41,15 +43,19 @@ function M.setup(opts)
       group = vim.api.nvim_create_augroup("SemSearchAutoIndex", { clear = true }),
       pattern = "*",
       callback = function()
-        -- Silent incremental update in the background
+        if index.is_indexing then return end
+        index.auto_indexing = true
         index.reindex(nil, { 
-          on_index_progress = function() end, -- No noisy UI for auto-save
+          auto_index = true,
+          on_index_progress = function() end,
           on_error = function(err) 
-            -- Only notify on significant errors, not background noise
             if not err:match("not initialized") then
               vim.notify("SemSearch Auto-index error: " .. err, vim.log.levels.DEBUG)
             end
-          end 
+          end,
+          on_done = function()
+            index.auto_indexing = false
+          end
         })
       end
     })

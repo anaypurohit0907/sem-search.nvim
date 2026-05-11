@@ -7,6 +7,9 @@ local M = {}
 M.app_state = "pending" -- pending, prompt_install, installing, indexing, ready, searching, results
 M.progress_msg = ""
 M.progress_pct = nil
+M.progress_chunks_total = nil
+M.progress_chunks_done = nil
+M.indexing_start_time = nil
 M.pending_resolve = nil
 M.current_results = {}
 M.search_start_time = nil
@@ -391,10 +394,15 @@ function M.search(opts)
 			M.progress_msg = msg
 			M.progress_pct = pct
 		end,
-		on_index_progress = function(msg, pct)
+		on_index_progress = function(msg, pct, chunks_total, chunks_done)
 			M.app_state = "indexing"
 			M.progress_msg = msg
 			M.progress_pct = pct
+			M.progress_chunks_total = chunks_total
+			M.progress_chunks_done = chunks_done
+			if not M.indexing_start_time and pct and pct > 0 then
+				M.indexing_start_time = vim.loop.hrtime()
+			end
 		end,
 		on_error = function(msg)
 			local_ready_drawn = false
@@ -427,8 +435,22 @@ function M.search(opts)
 				}
 				pcall(vim.api.nvim_win_set_config, results_win, { title = "  Setup Required " })
 				vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
-			elseif M.app_state == "installing" or M.app_state == "indexing" then
+elseif M.app_state == "installing" or M.app_state == "indexing" then
 				local bar
+				local eta_str = ""
+				if M.progress_pct and M.progress_pct > 0 and M.indexing_start_time then
+					local elapsed_s = (vim.loop.hrtime() - M.indexing_start_time) / 1e9
+					local rate = elapsed_s / M.progress_pct
+					local remaining = math.max(0, (100 - M.progress_pct) * rate)
+					local mins = math.floor(remaining / 60)
+					local secs = math.floor(remaining % 60)
+					if mins > 0 then
+						eta_str = string.format("  ETA: ~%dm %ds", mins, secs)
+					else
+						eta_str = string.format("  ETA: ~%ds", secs)
+					end
+				end
+
 				if M.progress_pct then
 					local bar_width = 30
 					local filled = math.floor((M.progress_pct / 100) * bar_width)
@@ -445,9 +467,16 @@ function M.search(opts)
 					"",
 					"  " .. icon .. " " .. M.progress_msg,
 					"  [" .. bar .. "]",
-					"",
-					"  " .. spinner_frames[frame] .. " " .. tips[tip_idx],
+					eta_str ~= "" and eta_str or "",
 				}
+
+				if M.progress_chunks_total and M.progress_chunks_done then
+					local count_str = string.format("  Chunks: %d / %d", M.progress_chunks_done, M.progress_chunks_total)
+					table.insert(lines, count_str)
+				else
+					table.insert(lines, "  " .. spinner_frames[frame] .. " " .. tips[tip_idx])
+				end
+
 				pcall(vim.api.nvim_win_set_config, results_win, { title = "  Booting up... " })
 				vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
 				frame = (frame % #spinner_frames) + 1
